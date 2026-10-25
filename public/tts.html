@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>语音合成测试 - 阿里云百炼 TTS</title>
+  <!-- 空 favicon：阻止浏览器发出 /favicon.ico 404 请求 -->
+  <link rel="icon" href="data:,">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --glass-bg: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-hover: rgba(255, 255, 255, 0.07);
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.3);
+      --accent-light: #818cf8;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* 背景动效 */
+    .bg-effects { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+    .bg-effects::before {
+      content: ''; position: absolute; top: -30%; left: -10%;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+      animation: float1 20s ease-in-out infinite;
+    }
+    .bg-effects::after {
+      content: ''; position: absolute; bottom: -20%; right: -10%;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.09) 0%, transparent 70%);
+      animation: float2 25s ease-in-out infinite;
+    }
+    @keyframes float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(80px, 60px) scale(1.1); } }
+    @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-60px, -40px) scale(1.15); } }
+
+    /* 后端连接提示横幅 */
+    .conn-banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 10px 20px;
+      background: rgba(251, 191, 36, 0.12);
+      border-bottom: 1px solid rgba(251, 191, 36, 0.35);
+      color: var(--warning);
+      font-size: 13px; text-align: center;
+      backdrop-filter: blur(10px);
+    }
+    .conn-banner code {
+      font-family: var(--font-mono);
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1px 6px; border-radius: 4px;
+    }
+    .conn-banner b { color: var(--text-primary); }
+
+    .container {
+      position: relative; z-index: 1;
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 10px 18px 24px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+
+    /* 顶栏 */
+    .topbar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .header { margin: 0; display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+    .header h1 {
+      font-size: 1.08rem; font-weight: 700;
+      background: linear-gradient(135deg, #f1f5f9, #6366f1);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      line-height: 1.2; white-space: nowrap;
+    }
+    .header p {
+      color: var(--text-secondary); font-size: 0.74rem; line-height: 1.3;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .topnav { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
+    .topnav a {
+      padding: 4px 11px; border-radius: 18px;
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--text-secondary); font-size: 0.75rem;
+      text-decoration: none; white-space: nowrap; transition: all 0.2s ease;
+    }
+    .topnav a:hover { color: var(--text-primary); border-color: rgba(255, 255, 255, 0.18); }
+    .topnav a.active {
+      color: var(--accent-light);
+      border-color: rgba(99, 102, 241, 0.5);
+      background: rgba(99, 102, 241, 0.12);
+    }
+
+    /* 玻璃卡片 */
+    .glass-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 11px 14px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transition: border-color 0.3s ease;
+      min-width: 0;
+    }
+    .glass-card:hover { border-color: rgba(255, 255, 255, 0.12); }
+
+    .card-title {
+      font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);
+      letter-spacing: 0.04em;
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 9px;
+    }
+    .card-title .cnt { color: var(--text-muted); font-weight: 400; font-family: var(--font-mono); font-size: 0.68rem; }
+    .card-title .cnt.ellip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62%; }
+    .card-title .spacer { flex: 1; }
+
+    /* 主体两栏 */
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+    .col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    @media (min-width: 1281px) {
+      .col-right { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow-y: auto; padding-right: 2px; }
+    }
+    @media (max-width: 1280px) {
+      .main-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    /* ========== 表单：24 列网格 ========== */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(24, minmax(0, 1fr));
+      column-gap: 10px; row-gap: 8px;
+    }
+    .f-16 { grid-column: span 16; } .f-8 { grid-column: span 8; }
+    .f-12 { grid-column: span 12; } .f-6 { grid-column: span 6; }
+    .f-4 { grid-column: span 4; } .f-24 { grid-column: span 24; }
+    .f-9 { grid-column: span 9; } .f-15 { grid-column: span 15; }
+
+    .form-group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .form-group label {
+      font-size: 0.72rem; color: var(--text-secondary); font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lab-tip { font-size: 0.66rem; color: var(--text-muted); font-weight: 400; margin-left: 4px; }
+
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 7px 10px;
+      border-radius: 9px;
+      border: 1px solid var(--glass-border);
+      background: rgba(0, 0, 0, 0.3);
+      color: var(--text-primary); font-size: 0.83rem;
+      outline: none; transition: all 0.2s ease;
+      font-family: var(--font-mono);
+    }
+    .form-group select { cursor: pointer; appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%); background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 24px; }
+    .form-group select option { background: var(--bg-secondary); color: var(--text-primary); }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .form-group input::placeholder, .form-group textarea::placeholder { color: var(--text-muted); }
+    .form-group input[readonly] { color: var(--text-muted); }
+
+    /* 带后缀按钮的输入容器 */
+    .input-affix {
+      display: flex; align-items: stretch; min-width: 0;
+      border: 1px solid var(--glass-border); border-radius: 9px;
+      background: rgba(0, 0, 0, 0.3);
+      transition: all 0.2s ease;
+    }
+    .input-affix:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .input-affix input { border: none; background: transparent; flex: 1; min-width: 0; box-shadow: none !important; }
+    .affix-btn {
+      border: none; background: transparent; color: var(--text-muted);
+      padding: 0 10px; cursor: pointer; font-size: 0.82rem; border-radius: 0 8px 8px 0;
+      transition: all 0.2s ease;
+    }
+    .affix-btn:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
+
+    /* 滑块行：range + 数值 */
+    .range-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; padding-top: 3px; }
+    .range-wrap input[type=range] { flex: 1; min-width: 0; }
+    .range-val {
+      font-family: var(--font-mono); font-size: 0.72rem; color: var(--accent-light);
+      width: 36px; text-align: right; flex-shrink: 0;
+    }
+    input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px;
+      background: rgba(255, 255, 255, 0.14);
+      outline: none; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 13px; height: 13px; border-radius: 50%;
+      background: var(--accent-light);
+      border: 2px solid #0a0e1a;
+      box-shadow: 0 0 6px var(--accent-glow);
+      cursor: pointer;
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 13px; height: 13px; border-radius: 50%;
+      background: var(--accent-light); border: 2px solid #0a0e1a; cursor: pointer;
+    }
+    input[type=range]:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* 开关（checkbox pill） */
+    .switch-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .switch {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 11px; border-radius: 18px;
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      font-size: 0.72rem; color: var(--text-secondary);
+      cursor: pointer; user-select: none; transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .switch:hover { color: var(--text-primary); border-color: rgba(255, 255, 255, 0.18); }
+    .switch input { display: none; }
+    .switch .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2); transition: all 0.2s ease;
+    }
+    .switch.on {
+      color: var(--accent-light);
+      border-color: rgba(99, 102, 241, 0.5);
+      background: rgba(99, 102, 241, 0.12);
+    }
+    .switch.on .dot { background: var(--accent-light); box-shadow: 0 0 6px var(--accent-glow); }
+    .switch.disabled { opacity: 0.4; pointer-events: none; }
+
+    /* ========== 音色选择器 ========== */
+    .voice-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .voice-search {
+      flex: 1; min-width: 0;
+      padding: 6px 10px; border-radius: 9px;
+      border: 1px solid var(--glass-border); background: rgba(0, 0, 0, 0.3);
+      color: var(--text-primary); font-size: 0.78rem; outline: none;
+    }
+    .voice-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .voice-groups { display: flex; gap: 5px; flex-wrap: wrap; }
+    .vgroup {
+      padding: 3px 9px; border-radius: 14px;
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--text-muted); font-size: 0.68rem; cursor: pointer;
+      transition: all 0.2s ease; white-space: nowrap;
+    }
+    .vgroup:hover { color: var(--text-secondary); }
+    .vgroup.on { color: var(--accent-light); border-color: rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.1); }
+
+    .voice-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+      gap: 6px;
+      max-height: 168px; overflow-y: auto;
+      padding: 2px 4px 2px 2px;
+      margin-bottom: 8px;
+    }
+    .voice-chip {
+      display: flex; flex-direction: column; gap: 1px;
+      padding: 6px 9px; border-radius: 9px;
+      border: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.03);
+      cursor: pointer; transition: all 0.18s ease; min-width: 0;
+    }
+    .voice-chip:hover { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); }
+    .voice-chip.on {
+      border-color: var(--accent); background: rgba(99, 102, 241, 0.15);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+    .voice-chip .vc-name {
+      font-size: 0.76rem; color: var(--text-primary); font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .voice-chip .vc-meta {
+      font-size: 0.63rem; color: var(--text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: var(--font-mono);
+    }
+    .voice-chip.on .vc-meta { color: var(--accent-light); }
+    .voice-empty { grid-column: 1 / -1; padding: 14px 8px; text-align: center; color: var(--text-muted); font-size: 0.74rem; line-height: 1.6; }
+
+    /* ========== 复刻音色：拉取按钮 / 分组 / 状态徽标 ========== */
+    .mini-btn {
+      padding: 2px 9px; border-radius: 12px; white-space: nowrap;
+      border: 1px solid rgba(99, 102, 241, 0.42); background: rgba(99, 102, 241, 0.1);
+      color: var(--accent-light); font-size: 0.68rem; font-weight: 400; cursor: pointer;
+      font-family: inherit; transition: all 0.18s ease;
+    }
+    .mini-btn:hover { background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.65); }
+    .mini-btn:disabled { opacity: 0.55; cursor: default; }
+    .vgroup.cloned { border-color: rgba(168, 85, 247, 0.45); color: #d8b4fe; }
+    .vgroup.cloned.on { color: #e9d5ff; border-color: rgba(168, 85, 247, 0.75); background: rgba(168, 85, 247, 0.15); }
+    .voice-chip .vc-st { font-size: 0.58rem; padding: 0 5px; border-radius: 8px; margin-left: 3px; font-weight: 400; }
+    .vc-st.ok { color: var(--success); background: rgba(52, 211, 153, 0.12); }
+    .vc-st.warn { color: var(--warning); background: rgba(251, 191, 36, 0.12); }
+    .vc-st.bad { color: var(--danger); background: rgba(248, 113, 113, 0.12); }
+    .voice-chip.off { opacity: 0.5; }
+
+    /* ========== 文本区 + 标签按钮 ========== */
+    .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; align-items: center; }
+    .tag-lab { font-size: 0.66rem; color: var(--text-muted); margin-right: 2px; }
+    .tag-btn {
+      padding: 2px 7px; border-radius: 12px;
+      border: 1px solid rgba(168, 85, 247, 0.28); background: rgba(168, 85, 247, 0.08);
+      color: #c4b5fd; font-size: 0.64rem; cursor: pointer;
+      font-family: var(--font-mono); transition: all 0.18s ease;
+    }
+    .tag-btn:hover { background: rgba(168, 85, 247, 0.18); border-color: rgba(168, 85, 247, 0.5); color: #ddd6fe; }
+    .char-count { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); }
+    .char-count.over { color: var(--danger); }
+
+    /* ========== 按钮 ========== */
+    .btn {
+      padding: 8px 18px; border-radius: 10px;
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--text-secondary); font-size: 0.82rem; font-weight: 500;
+      cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+    }
+    .btn:hover { color: var(--text-primary); border-color: rgba(255, 255, 255, 0.2); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      border-color: transparent; color: #fff;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .btn-primary:hover { box-shadow: 0 6px 22px var(--accent-glow); color: #fff; }
+    .btn-danger { border-color: rgba(248, 113, 113, 0.4); color: var(--danger); }
+    .btn-danger:hover { background: rgba(248, 113, 113, 0.12); color: var(--danger); }
+    .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn-row .spacer { flex: 1; }
+
+    /* 合成状态条 */
+    .run-status {
+      display: none; align-items: center; gap: 10px;
+      padding: 8px 13px; border-radius: var(--radius-sm);
+      background: rgba(99, 102, 241, 0.09);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      font-size: 0.76rem; color: var(--accent-light);
+      margin-top: 9px;
+    }
+    .run-status.show { display: flex; }
+    .run-status .spin {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid rgba(129, 140, 248, 0.25);
+      border-top-color: var(--accent-light);
+      animation: spin 0.8s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .run-status .detail { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); margin-left: auto; white-space: nowrap; }
+
+    /* 操作条吸底悬浮：滚动页面时始终可见，不必滑到底才能点「开始合成」 */
+    .run-bar {
+      position: sticky; bottom: 10px; z-index: 6;
+      box-shadow: 0 -6px 26px rgba(2, 6, 23, 0.6);
+      border-color: rgba(99, 102, 241, 0.22);
+    }
+    .run-bar:hover { border-color: rgba(99, 102, 241, 0.45); }
+
+    /* ========== 播放器 ========== */
+    .player { display: flex; flex-direction: column; gap: 9px; }
+    .wave-box {
+      position: relative; height: 84px; border-radius: 10px;
+      background: rgba(0, 0, 0, 0.28);
+      border: 1px solid var(--glass-border);
+      overflow: hidden; cursor: pointer;
+    }
+    .wave-box canvas { display: block; width: 100%; height: 100%; }
+    .wave-hint {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 0 16px;
+      line-height: 1.6;
+    }
+    .wave-hint.hide { display: none; }
+
+    .player-bar { display: flex; align-items: center; gap: 10px; }
+    .play-btn {
+      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+      border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      color: #fff; font-size: 0.85rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 3px 12px var(--accent-glow);
+      transition: all 0.2s ease;
+    }
+    .play-btn:hover { transform: scale(1.06); }
+    .play-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+    .seek {
+      flex: 1; min-width: 0; height: 5px; border-radius: 3px;
+      background: rgba(255, 255, 255, 0.12); cursor: pointer; position: relative;
+    }
+    .seek-fill {
+      height: 100%; border-radius: 3px; width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-light));
+      transition: width 0.08s linear;
+    }
+    .time-label {
+      font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .icon-btn {
+      width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--text-secondary); cursor: pointer; font-size: 0.82rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .icon-btn:hover { color: var(--text-primary); border-color: rgba(255, 255, 255, 0.2); }
+    .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* ========== 指标卡 ========== */
+    .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .metric {
+      padding: 9px 11px; border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.22);
+      border: 1px solid var(--glass-border);
+      display: flex; flex-direction: column; gap: 2px; min-width: 0;
+    }
+    .metric-label {
+      font-size: 0.65rem; color: var(--text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .metric-value {
+      font-family: var(--font-mono); font-size: 1.02rem; font-weight: 600;
+      color: var(--text-primary); line-height: 1.25;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .metric-value .unit { font-size: 0.68rem; color: var(--text-muted); font-weight: 400; margin-left: 2px; }
+    .metric-value.waiting { color: var(--text-muted); font-weight: 500; }
+    .metric-value.good { color: var(--success); }
+    .metric-value.warn { color: var(--warning); }
+    .metric-value.bad { color: var(--danger); }
+
+    /* 扩展信息 chips */
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      font-size: 0.67rem; color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .chip i { font-style: normal; color: var(--text-muted); font-size: 0.63rem; }
+    .chip b { font-family: var(--font-mono); color: var(--text-primary); font-weight: 600; font-size: 0.69rem; }
+    .chip b.good { color: var(--success); }
+
+    /* ========== 请求详情 / 折叠块 ========== */
+    details.fold {
+      border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.18);
+      overflow: hidden;
+    }
+    details.fold > summary {
+      padding: 8px 12px; cursor: pointer; list-style: none;
+      font-size: 0.73rem; color: var(--text-secondary);
+      display: flex; align-items: center; gap: 7px; user-select: none;
+    }
+    details.fold > summary::-webkit-details-marker { display: none; }
+    details.fold > summary::before {
+      content: '▸'; color: var(--text-muted); font-size: 0.68rem;
+      transition: transform 0.2s ease; display: inline-block;
+    }
+    details.fold[open] > summary::before { transform: rotate(90deg); }
+    details.fold > summary:hover { color: var(--text-primary); }
+    .fold-body { padding: 0 12px 11px; }
+    pre.code {
+      font-family: var(--font-mono); font-size: 0.68rem; line-height: 1.55;
+      color: #a5b4fc; background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--glass-border); border-radius: 8px;
+      padding: 9px 11px; overflow-x: auto; white-space: pre-wrap;
+      word-break: break-all; max-height: 210px; overflow-y: auto;
+    }
+
+    /* ========== 历史记录 ========== */
+    .hist-wrap { max-height: 260px; overflow-y: auto; }
+    table.hist { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+    table.hist th {
+      position: sticky; top: 0; z-index: 2;
+      background: #0d1220;
+      color: var(--text-muted); font-weight: 500; font-size: 0.66rem;
+      text-align: left; padding: 6px 7px; white-space: nowrap;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    table.hist td {
+      padding: 6px 7px; border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+      color: var(--text-secondary); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 150px;
+    }
+    table.hist tr:hover td { background: rgba(255, 255, 255, 0.035); }
+    table.hist td.mono { font-family: var(--font-mono); }
+    table.hist td.ok { color: var(--success); }
+    table.hist .play-mini {
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--accent-light); border-radius: 6px; padding: 1px 7px;
+      font-size: 0.66rem; cursor: pointer; transition: all 0.2s ease;
+    }
+    table.hist .play-mini:hover { border-color: var(--accent); background: rgba(99, 102, 241, 0.14); }
+    table.hist .empty-row td { text-align: center; color: var(--text-muted); padding: 18px 8px; }
+
+    /* 错误提示浮层（避开卡片 backdrop-filter 的包含块影响，固定定位） */
+    .error-box {
+      position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+      z-index: 200; max-width: min(760px, 92vw);
+      padding: 11px 16px; border-radius: var(--radius-sm);
+      background: rgba(248, 113, 113, 0.14);
+      border: 1px solid rgba(248, 113, 113, 0.45);
+      color: #fca5a5; font-size: 0.78rem; line-height: 1.55;
+      backdrop-filter: blur(14px); cursor: pointer;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+      display: none; white-space: pre-wrap; word-break: break-word;
+    }
+    .error-box.show { display: block; }
+    .error-box b { color: #fecaca; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(14px);
+      z-index: 210; padding: 8px 18px; border-radius: 20px;
+      background: rgba(17, 24, 39, 0.94); border: 1px solid var(--glass-border);
+      color: var(--text-primary); font-size: 0.78rem;
+      backdrop-filter: blur(14px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+      opacity: 0; pointer-events: none; transition: all 0.28s ease;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* 滚动条 */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.11); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="conn-banner" id="connBanner" style="display:none"></div>
+  <div class="bg-effects"></div>
+
+  <div class="container">
+    <div class="topbar">
+      <div class="header">
+        <h1>Voice Test</h1>
+        <p>阿里云百炼 TTS · 全参数可调 · 波形可视 · 首包延迟</p>
+      </div>
+      <nav class="topnav">
+        <a href="/">⚡ 速度测试</a>
+        <a href="/chat.html">💬 聊天测试</a>
+        <a href="/tts.html" class="active">🎙 语音合成</a>
+        <a href="/pipeline.html">🔗 链路联调</a>
+        <a href="/voice.html">🎧 语音对话</a>
+      </nav>
+    </div>
+
+    <div class="main-grid">
+      <!-- ==================== 左栏：参数 ==================== -->
+      <div class="col col-left">
+
+        <!-- 连接配置 -->
+        <div class="glass-card">
+          <div class="card-title">连接配置<span class="spacer"></span><span class="cnt ellip" id="endpointPreview"></span></div>
+          <div class="form-grid">
+            <div class="form-group f-16">
+              <label>接口地址<span class="lab-tip">百炼域名，路径按模型自动补全</span></label>
+              <input type="text" id="apiUrl" list="urlPresets" placeholder="https://dashscope.aliyuncs.com" spellcheck="false" autocomplete="off">
+              <datalist id="urlPresets">
+                <option value="https://dashscope.aliyuncs.com"></option>
+                <option value="https://dashscope-intl.aliyuncs.com"></option>
+              </datalist>
+            </div>
+            <div class="form-group f-8">
+              <label>API Key</label>
+              <div class="input-affix">
+                <input type="password" id="apiKey" placeholder="sk-..." spellcheck="false" autocomplete="off">
+                <button type="button" class="affix-btn" id="keyToggle" title="显示 / 隐藏 Key">👁</button>
+              </div>
+            </div>
+            <div class="form-group f-15">
+              <label>模型<span class="lab-tip">决定端点路径与可用音色</span></label>
+              <select id="modelSelect"></select>
+            </div>
+            <div class="form-group f-9">
+              <label>输出模式<span class="lab-tip">流式可测首包延迟</span></label>
+              <div class="switch-row" style="padding-top:2px">
+                <label class="switch on" id="streamSwitch">
+                  <input type="checkbox" id="streamOn" checked>
+                  <span class="dot"></span><span>流式返回</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 音色选择 -->
+        <div class="glass-card">
+          <div class="card-title">
+            音色<span class="cnt" id="voiceCount"></span>
+            <span class="spacer"></span>
+            <button type="button" class="mini-btn" id="fetchClonedBtn" title="从百炼拉取本账号已复刻的音色（需要先填 API Key）">⟳ 拉取复刻音色</button>
+            <span class="cnt" id="familyHint"></span>
+          </div>
+          <div class="voice-tools">
+            <input type="text" class="voice-search" id="voiceSearch" placeholder="搜索音色名或参数…" spellcheck="false" autocomplete="off">
+            <div class="voice-groups" id="voiceGroups"></div>
+          </div>
+          <div class="voice-list" id="voiceList"></div>
+          <div class="form-grid">
+            <div class="form-group f-15">
+              <label>voice 参数<span class="lab-tip">可直接手输，支持声音复刻 / 设计音色</span></label>
+              <input type="text" id="voiceInput" placeholder="如 longanhuan_v3.1" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="form-group f-9">
+              <label>声音复刻 / 设计音色 ID<span class="lab-tip">可点上方「拉取复刻音色」</span></label>
+              <input type="text" id="voiceQuick" placeholder="自定义音色 ID" spellcheck="false" autocomplete="off">
+            </div>
+          </div>
+        </div>
+
+        <!-- 待合成文本 -->
+        <div class="glass-card">
+          <div class="card-title">
+            待合成文本
+            <span class="spacer"></span>
+            <span class="char-count" id="charCount">0 字</span>
+          </div>
+          <div class="form-group">
+            <textarea id="ttsText" rows="4" placeholder="输入要合成的文本…&#10;支持直接写情感标签，例如： [excited]今天的天气真不错！[laughing]我们一起出去玩吧！" spellcheck="false"></textarea>
+          </div>
+          <div class="tag-row" id="tagRow">
+            <span class="tag-lab">情感标签</span>
+          </div>
+        </div>
+
+        <!-- 音频参数 -->
+        <div class="glass-card">
+          <div class="card-title">音频参数<span class="spacer"></span><span class="cnt" id="paramFamHint"></span></div>
+          <div class="form-grid" id="paramGrid">
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice">
+              <label>音频格式 format</label>
+              <select id="pFormat">
+                <option value="mp3">mp3</option>
+                <option value="wav">wav</option>
+                <option value="pcm">pcm</option>
+                <option value="opus">opus</option>
+              </select>
+            </div>
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice">
+              <label>采样率 sample_rate</label>
+              <select id="pSampleRate">
+                <option value="8000">8000 Hz</option>
+                <option value="12000">12000 Hz</option>
+                <option value="16000">16000 Hz</option>
+                <option value="22050" selected>22050 Hz（默认）</option>
+                <option value="24000">24000 Hz</option>
+                <option value="44100">44100 Hz</option>
+                <option value="48000">48000 Hz</option>
+              </select>
+            </div>
+            <div class="form-group f-6" data-fam="qwen-tts">
+              <label>语种 language_type</label>
+              <select id="pLanguageType">
+                <option value="Auto">Auto（自动）</option>
+                <option value="Chinese">Chinese 中文</option>
+                <option value="English">English 英语</option>
+                <option value="German">German 德语</option>
+                <option value="Italian">Italian 意大利语</option>
+                <option value="Portuguese">Portuguese 葡萄牙语</option>
+                <option value="Spanish">Spanish 西班牙语</option>
+                <option value="Japanese">Japanese 日语</option>
+                <option value="Korean">Korean 韩语</option>
+                <option value="French">French 法语</option>
+                <option value="Russian">Russian 俄语</option>
+              </select>
+            </div>
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice">
+              <label>语种提示 language_hints</label>
+              <select id="pLangHints">
+                <option value="">不指定</option>
+                <option value="zh">zh 中文</option>
+                <option value="en">en 英语</option>
+                <option value="fr">fr 法语</option>
+                <option value="de">de 德语</option>
+                <option value="ja">ja 日语</option>
+                <option value="ko">ko 韩语</option>
+                <option value="ru">ru 俄语</option>
+                <option value="pt">pt 葡萄牙语</option>
+                <option value="th">th 泰语</option>
+                <option value="id">id 印尼语</option>
+                <option value="vi">vi 越南语</option>
+                <option value="es">es 西班牙语</option>
+                <option value="it">it 意大利语</option>
+                <option value="ms">ms 马来西亚语</option>
+                <option value="fil">fil 菲律宾语</option>
+                <option value="ar">ar 阿拉伯语</option>
+              </select>
+            </div>
+
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice">
+              <label>音量 volume <span class="lab-tip">0–100</span></label>
+              <div class="range-wrap">
+                <input type="range" id="pVolume" min="0" max="100" step="1" value="50">
+                <span class="range-val" id="pVolumeVal">50</span>
+              </div>
+            </div>
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice">
+              <label>语速 rate <span class="lab-tip">0.5–2.0</span></label>
+              <div class="range-wrap">
+                <input type="range" id="pRate" min="0.5" max="2" step="0.05" value="1">
+                <span class="range-val" id="pRateVal">1.00</span>
+              </div>
+            </div>
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice">
+              <label>音调 pitch <span class="lab-tip">0.5–2.0</span></label>
+              <div class="range-wrap">
+                <input type="range" id="pPitch" min="0.5" max="2" step="0.05" value="1">
+                <span class="range-val" id="pPitchVal">1.00</span>
+              </div>
+            </div>
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice" id="bitRateGroup">
+              <label>码率 bit_rate <span class="lab-tip">kbps，仅 opus</span></label>
+              <input type="number" id="pBitRate" min="6" max="510" step="1" value="32" placeholder="32">
+            </div>
+            <div class="form-group f-6" data-fam="qwen-audio-tts cosyvoice">
+              <label>随机种子 seed <span class="lab-tip">0–65535，可复现</span></label>
+              <input type="number" id="pSeed" min="0" max="65535" step="1" placeholder="留空 = 每次不同">
+            </div>
+
+            <div class="form-group f-24" data-fam="qwen-audio-tts cosyvoice">
+              <label>指令 instruction<span class="lab-tip">自然语言控制语气 / 情感 / 方言，≤100 字符</span></label>
+              <input type="text" id="pInstruction" list="instrPresets" placeholder="如：请用河南话表达。 / 用温柔的语气，语速稍慢" spellcheck="false" autocomplete="off">
+              <datalist id="instrPresets">
+                <option value="请用河南话表达。"></option>
+                <option value="请用四川话表达。"></option>
+                <option value="请用东北话表达。"></option>
+                <option value="请用粤语表达。"></option>
+                <option value="用温柔的语气，语速稍慢"></option>
+                <option value="沉稳的中年男性，语速缓慢，音色低沉有磁性，适合朗读新闻"></option>
+                <option value="年轻活泼的女性声音，语速较快，带有明显的上扬语调"></option>
+                <option value="标准播音风格：吐字清晰精准，字正腔圆"></option>
+              </datalist>
+            </div>
+          </div>
+        </div>
+
+        <!-- 高级选项 -->
+        <div class="glass-card">
+          <details class="fold">
+            <summary>高级选项 · SSML / 字级时间戳 / AIGC 标识 / 热修复</summary>
+            <div class="fold-body">
+              <div class="switch-row" style="margin-bottom:9px">
+                <label class="switch" id="ssmlSwitch">
+                  <input type="checkbox" id="pEnableSsml">
+                  <span class="dot"></span><span>启用 SSML</span>
+                </label>
+                <label class="switch" id="tsSwitch">
+                  <input type="checkbox" id="pWordTs">
+                  <span class="dot"></span><span>字级时间戳（仅流式）</span>
+                </label>
+                <label class="switch" id="aigcSwitch">
+                  <input type="checkbox" id="pAigcTag">
+                  <span class="dot"></span><span>AIGC 隐性标识</span>
+                </label>
+              </div>
+              <div class="form-grid" id="aigcGrid" style="display:none">
+                <div class="form-group f-12">
+                  <label>传播者 aigc_propagator <span class="lab-tip">默认阿里云 UID</span></label>
+                  <input type="text" id="pAigcPropagator" placeholder="留空使用默认值" spellcheck="false" autocomplete="off">
+                </div>
+                <div class="form-group f-12">
+                  <label>传播行为 aigc_propagate_id <span class="lab-tip">默认本次 Request ID</span></label>
+                  <input type="text" id="pAigcPropagateId" placeholder="留空使用默认值" spellcheck="false" autocomplete="off">
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:9px">
+                <div class="form-group f-24" data-fam="qwen-audio-tts cosyvoice">
+                  <label>热修复 hot_fix <span class="lab-tip">JSON：自定义发音 / 文本替换</span></label>
+                  <input type="text" id="pHotFix" placeholder='{"replace":[{"今天":"金天"}]} 或 {"pronunciation":[{"天气":"tian1 qi4"}]}' spellcheck="false" autocomplete="off">
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:9px">
+                <div class="form-group f-12">
+                  <label>参数位置<span class="lab-tip">新版文档放 input</span></label>
+                  <select id="pPlacement">
+                    <option value="input">input（推荐）</option>
+                    <option value="parameters">parameters（旧版 SDK）</option>
+                  </select>
+                </div>
+                <div class="form-group f-12">
+                  <label>超时 timeoutSec</label>
+                  <input type="number" id="pTimeout" min="10" max="600" step="10" value="120">
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- 操作按钮（吸底悬浮：滚动时始终可见） -->
+        <div class="glass-card run-bar">
+          <div class="btn-row">
+            <button class="btn btn-primary" id="runBtn">▶ 开始合成</button>
+            <button class="btn btn-danger" id="stopBtn" disabled>■ 停止</button>
+            <span class="spacer"></span>
+            <button class="btn" id="curlBtn">📋 复制 cURL</button>
+            <button class="btn" id="saveBtn">💾 保存配置</button>
+            <button class="btn" id="resetBtn">↺ 重置</button>
+          </div>
+          <div class="run-status" id="runStatus">
+            <span class="spin"></span>
+            <span id="runText">合成中…</span>
+            <span class="detail" id="runDetail"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 右栏：结果 ==================== -->
+      <div class="col col-right">
+
+        <!-- 播放器 -->
+        <div class="glass-card">
+          <div class="card-title">
+            试听
+            <span class="spacer"></span>
+            <span class="cnt" id="audioMeta"></span>
+          </div>
+          <div class="player">
+            <div class="wave-box" id="waveBox">
+              <canvas id="waveCanvas"></canvas>
+              <div class="wave-hint" id="waveHint">尚未生成音频<br>左侧填好参数后点「开始合成」</div>
+            </div>
+            <div class="player-bar">
+              <button class="play-btn" id="playBtn" disabled>▶</button>
+              <div class="seek" id="seek"><div class="seek-fill" id="seekFill"></div></div>
+              <span class="time-label" id="timeLabel">0:00 / 0:00</span>
+              <button class="icon-btn" id="dlBtn" title="下载音频" disabled>⤓</button>
+            </div>
+          </div>
+          <audio id="audioEl" hidden></audio>
+        </div>
+
+        <!-- 指标 -->
+        <div class="glass-card">
+          <div class="card-title">性能指标<span class="spacer"></span><span class="cnt" id="modelTag"></span></div>
+          <div class="metrics">
+            <div class="metric">
+              <span class="metric-label">首包延迟 TTFA</span>
+              <span class="metric-value waiting" id="mTtfa">—</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">总耗时</span>
+              <span class="metric-value waiting" id="mTotal">—</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">音频时长</span>
+              <span class="metric-value waiting" id="mDuration">—</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">实时率 RTF</span>
+              <span class="metric-value waiting" id="mRtf">—</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">音频大小</span>
+              <span class="metric-value waiting" id="mBytes">—</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">计费字符</span>
+              <span class="metric-value waiting" id="mChars">—</span>
+            </div>
+          </div>
+          <div class="tag-row" id="extraChips" style="margin-top:9px"></div>
+        </div>
+
+        <!-- 请求详情 -->
+        <div class="glass-card">
+          <details class="fold">
+            <summary>实际下发的请求体</summary>
+            <div class="fold-body">
+              <pre class="code" id="reqPreview">（尚未发起请求）</pre>
+            </div>
+          </details>
+        </div>
+
+        <!-- 历史 -->
+        <div class="glass-card">
+          <div class="card-title">
+            历史记录<span class="cnt" id="histCount">0 条</span>
+            <span class="spacer"></span>
+            <button class="btn" id="clearHistBtn" style="padding:2px 10px;font-size:0.68rem">清空</button>
+          </div>
+          <div class="hist-wrap">
+            <table class="hist">
+              <thead>
+                <tr>
+                  <th>时间</th><th>模型 / 音色</th><th>TTFA</th><th>总耗时</th><th>大小</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="histBody">
+                <tr class="empty-row"><td colspan="6">暂无记录，合成一次试试</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+  <div class="toast" id="toast"></div>
+
+  <script src="shared.js"></script>
+  <script src="tts-voices.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    const $ = (id) => document.getElementById(id);
+    const qs = (sel, root) => (root || document).querySelector(sel);
+    const qsa = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+    /* ==================== 模型定义 ==================== */
+    /* family 决定端点路径与参数适用性，必须与 server.js 的 TTS_FAMILY_PATH 对应 */
+    const MODELS = [
+      { id: 'qwen-audio-3.1-tts-flash', family: 'qwen-audio-tts', group: 'Qwen-Audio-TTS', label: 'qwen-audio-3.1-tts-flash', note: '最新 · 方言/多语种', defaultVoice: 'longanhuan_v3.1' },
+      { id: 'qwen-audio-3.0-tts-plus', family: 'qwen-audio-tts', group: 'Qwen-Audio-TTS', label: 'qwen-audio-3.0-tts-plus', note: '音质优先', defaultVoice: 'longanlingxin' },
+      { id: 'qwen-audio-3.0-tts-flash', family: 'qwen-audio-tts', group: 'Qwen-Audio-TTS', label: 'qwen-audio-3.0-tts-flash', note: '速度优先', defaultVoice: 'longanfengyue' },
+      { id: 'cosyvoice-v3.5-flash', family: 'cosyvoice', group: 'CosyVoice', label: 'cosyvoice-v3.5-flash', note: '仅复刻/设计音色', defaultVoice: '' },
+      { id: 'cosyvoice-v3.5-plus', family: 'cosyvoice', group: 'CosyVoice', label: 'cosyvoice-v3.5-plus', note: '仅复刻/设计音色', defaultVoice: '' },
+      { id: 'cosyvoice-v3-flash', family: 'cosyvoice', group: 'CosyVoice', label: 'cosyvoice-v3-flash', note: '系统音色丰富', defaultVoice: 'longanyang' },
+      { id: 'cosyvoice-v3-plus', family: 'cosyvoice', group: 'CosyVoice', label: 'cosyvoice-v3-plus', note: '', defaultVoice: 'longanyang' },
+      { id: 'cosyvoice-v2', family: 'cosyvoice', group: 'CosyVoice', label: 'cosyvoice-v2', note: '', defaultVoice: '' },
+      { id: 'qwen3-tts-flash', family: 'qwen-tts', group: 'Qwen-TTS', label: 'qwen3-tts-flash', note: '48 音色 · 多语种', defaultVoice: 'Cherry' }
+    ];
+
+    const FAMILY_HINT = {
+      'qwen-audio-tts': 'Qwen-Audio-TTS 家族 · 参数最全',
+      'cosyvoice': 'CosyVoice 家族',
+      'qwen-tts': 'Qwen-TTS 家族 · 参数较少'
+    };
+
+    /* 情感 / 富语言标签（Qwen-Audio-TTS 3.1 & 3.0 支持）
+       官方控制类标签共 24 个，这里挑最高频的 12 个做成按钮，其余可手输 */
+    const EMOTION_TAGS = ['excited', 'serious', 'sad', 'angry', 'amazed', 'curious', 'crying', 'whispers', 'asmr', 'mischievously', 'very fast', 'very slowly'];
+    const SOUND_TAGS = ['laughing', 'giggles', 'sighing', 'gasp', 'cough', 'clears throat', 'snorts'];
+
+    const LS_CONFIG = 'llm-tts-config-v1';
+    const LS_HISTORY = 'llm-tts-history-v1';
+    const LS_CLONED = 'llm-tts-cloned-v1';
+    const DEFAULT_URL = 'https://dashscope.aliyuncs.com';
+    const DEFAULT_TEXT = '[excited]你好呀！我是由通义千问驱动的语音合成模型。[laughing]今天想听点什么？';
+
+    /* ==================== 状态 ==================== */
+    let lib = window.TTS_VOICE_LIBRARY || {};
+    let state = {
+      modelId: MODELS[0].id,
+      family: MODELS[0].family,
+      voice: MODELS[0].defaultVoice,
+      groupFilter: '',
+      search: '',
+      cloned: [],          // 已拉取的复刻音色 [{ voiceId, status, gmtCreate, ... }]
+      clonedAt: 0
+    };
+    let running = false;
+    let controller = null;      // 当前请求的 AbortController
+    let currentAudio = null;    // { url, durationMs, bytes, format, params, ts }
+    let peaks = [];             // 波形峰值
+    let decodedBuffer = null;   // Web Audio 解码结果（用于时长与波形）
+    let rafId = 0;
+
+    /* ==================== 工具 ==================== */
+    function toast(msg, ms) {
+      const el = $('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove('show'), ms || 1900);
+    }
+
+    function showError(msg) {
+      const box = $('errorBox');
+      box.innerHTML = '<b>出错了</b><br>' + String(msg).replace(/</g, '&lt;');
+      box.classList.add('show');
+    }
+    $('errorBox').addEventListener('click', () => $('errorBox').classList.remove('show'));
+
+    function fmtMs(ms) {
+      if (ms == null || !isFinite(ms)) return '—';
+      if (ms < 1000) return Math.round(ms) + ' ms';
+      return (ms / 1000).toFixed(2) + ' s';
+    }
+    function fmtBytes(n) {
+      if (n == null || !isFinite(n)) return '—';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1024 / 1024).toFixed(2) + ' MB';
+    }
+    function fmtClock(sec) {
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return m + ':' + String(s).padStart(2, '0');
+    }
+    function fmtTime(ts) {
+      const d = new Date(ts);
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+    }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function setMetric(id, main, unit, tone) {
+      const el = $(id);
+      el.innerHTML = esc(String(main)) + (unit ? '<span class="unit">' + esc(unit) + '</span>' : '');
+      el.className = 'metric-value' + (tone ? ' ' + tone : '');
+    }
+
+    /* ==================== 模型与音色联动 ==================== */
+    function buildModelSelect() {
+      const sel = $('modelSelect');
+      const groups = {};
+      MODELS.forEach((m) => { (groups[m.group] = groups[m.group] || []).push(m); });
+      sel.innerHTML = Object.keys(groups).map((g) =>
+        '<optgroup label="' + esc(g) + '">' +
+        groups[g].map((m) =>
+          '<option value="' + esc(m.id) + '">' + esc(m.label) + (m.note ? ' · ' + esc(m.note) : '') + '</option>'
+        ).join('') + '</optgroup>'
+      ).join('');
+      sel.value = state.modelId;
+    }
+
+    function currentModel() {
+      return MODELS.find((m) => m.id === state.modelId) || MODELS[0];
+    }
+
+    /** 当前模型的音色分组数据 */
+    function voiceGroups() {
+      return lib[state.modelId] || [];
+    }
+
+    const CLONED_GROUP = '__cloned__';
+    const CLONED_STATUS = {
+      OK: { label: '可用', cls: 'ok' },
+      DEPLOYING: { label: '审核中', cls: 'warn' },
+      UNDEPLOYED: { label: '未通过', cls: 'bad' }
+    };
+
+    function renderVoiceGroups() {
+      const groups = voiceGroups();
+      const box = $('voiceGroups');
+      const parts = [];
+      // 复刻音色组：拉取成功后常驻（账号级音色，与当前模型无关）
+      if (state.cloned.length) {
+        parts.push('<button type="button" class="vgroup cloned' + (state.groupFilter === CLONED_GROUP ? ' on' : '') +
+          '" data-g="' + CLONED_GROUP + '" title="本账号在百炼已复刻的音色">🎭 复刻 (' + state.cloned.length + ')</button>');
+      }
+      if (groups.length) {
+        parts.push('<button type="button" class="vgroup' + (state.groupFilter === '' ? ' on' : '') + '" data-g="">全部</button>');
+        groups.forEach((g) => {
+          parts.push('<button type="button" class="vgroup' + (state.groupFilter === g.group ? ' on' : '') + '" data-g="' + esc(g.group) + '">' + esc(g.group) + '</button>');
+        });
+      }
+      box.innerHTML = parts.join('');
+    }
+
+    /** 复刻音色 ID 很长（形如 qwen-audio-3.0-tts-flash-xxx-xxxx），列表里缩短显示 */
+    function shortId(id) {
+      if (!id || id.length <= 26) return id;
+      return id.slice(0, 14) + '…' + id.slice(-8);
+    }
+
+    function renderVoiceList() {
+      const groups = voiceGroups();
+      const box = $('voiceList');
+      const kw = state.search.trim().toLowerCase();
+      const html = [];
+      let total = 0;
+
+      // 复刻音色被清空时（如重新拉取返回 0 条），自动退出复刻分组
+      if (!state.cloned.length && state.groupFilter === CLONED_GROUP) state.groupFilter = '';
+
+      // 复刻音色：未被过滤或正选中「复刻」分组时显示
+      if (state.cloned.length && (!state.groupFilter || state.groupFilter === CLONED_GROUP)) {
+        state.cloned
+          .filter((v) => !kw || (v.voiceId + ' ' + (v.status || '')).toLowerCase().indexOf(kw) >= 0)
+          .forEach((v) => {
+            total += 1;
+            const st = CLONED_STATUS[v.status] || { label: v.status || '未知', cls: '' };
+            const unusable = v.status === 'UNDEPLOYED' || v.status === 'DEPLOYING';
+            const on = v.voiceId === state.voice ? ' on' : '';
+            html.push(
+              '<button type="button" class="voice-chip' + on + (unusable ? ' off' : '') + '"' + (unusable ? ' disabled' : '') +
+              ' data-id="' + esc(v.voiceId) + '" data-cloned="1" title="' + esc(v.voiceId + (v.gmtCreate ? ' · 创建于 ' + v.gmtCreate : '') + ' · ' + st.label) + '">' +
+              '<span class="vc-name">' + esc(shortId(v.voiceId)) + ' <span class="vc-st ' + st.cls + '">' + esc(st.label) + '</span></span>' +
+              '<span class="vc-meta">' + esc((v.gmtCreate || '').slice(0, 10) || '复刻音色') + '</span>' +
+              '</button>'
+            );
+          });
+      }
+
+      // 内置系统音色
+      if (groups.length && state.groupFilter !== CLONED_GROUP) {
+        groups.forEach((g) => {
+          if (state.groupFilter && g.group !== state.groupFilter) return;
+          const hits = g.voices.filter((v) => {
+            if (!kw) return true;
+            return (v.id + ' ' + v.name + ' ' + v.note).toLowerCase().indexOf(kw) >= 0;
+          });
+          if (!hits.length) return;
+          total += hits.length;
+          hits.forEach((v) => {
+            const on = v.id === state.voice ? ' on' : '';
+            const genderMark = v.gender === '女' ? '♀' : (v.gender === '男' ? '♂' : '');
+            html.push(
+              '<button type="button" class="voice-chip' + on + '" data-id="' + esc(v.id) + '" title="' + esc(v.id + (v.note ? ' · ' + v.note : '')) + '">' +
+              '<span class="vc-name">' + esc(v.name) + (genderMark ? ' ' + genderMark : '') + '</span>' +
+              '<span class="vc-meta">' + esc(v.id) + '</span>' +
+              '</button>'
+            );
+          });
+        });
+      }
+
+      if (!groups.length && !state.cloned.length) {
+        box.innerHTML = '<div class="voice-empty">该模型没有内置系统音色<br>点上方「⟳ 拉取复刻音色」获取你的复刻音色，或在下方直接填 voice 参数</div>';
+        $('voiceCount').textContent = '';
+        return;
+      }
+
+      box.innerHTML = html.length ? html.join('') : '<div class="voice-empty">没有匹配「' + esc(state.search) + '」的音色</div>';
+      $('voiceCount').textContent = '(' + total + ')';
+    }
+
+    /* ==================== 复刻音色（从百炼拉取） ==================== */
+    function loadCloned() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(LS_CLONED) || 'null');
+        if (saved && Array.isArray(saved.voices)) {
+          state.cloned = saved.voices.filter((v) => v && v.voiceId);
+          state.clonedAt = saved.at || 0;
+        }
+      } catch (e) { /* 忽略损坏数据 */ }
+    }
+
+    function saveCloned() {
+      try { localStorage.setItem(LS_CLONED, JSON.stringify({ at: state.clonedAt, voices: state.cloned })); } catch (e) { /* 忽略 */ }
+    }
+
+    async function fetchClonedVoices() {
+      const apiKey = $('apiKey').value.trim();
+      if (!apiKey) { showError('请先填写 API Key，再拉取复刻音色'); $('apiKey').focus(); return; }
+
+      const btn = $('fetchClonedBtn');
+      btn.disabled = true;
+      btn.textContent = '⟳ 拉取中…';
+      try {
+        const res = await fetch('/api/tts/voices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: $('apiUrl').value.trim() || DEFAULT_URL,
+            apiKey,
+            family: state.family,
+            pageSize: 100
+          })
+        });
+        if (res.status === 404) {
+          throw new Error('服务端还没有 /api/tts/voices 接口 —— 请重启服务：Ctrl+C 后重新执行 npm start');
+        }
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json || json.error) throw new Error((json && json.error) || ('HTTP ' + res.status));
+
+        state.cloned = json.voices || [];
+        state.clonedAt = Date.now();
+        saveCloned();
+        // 拉取成功后自动切到「复刻」分组，立刻能看到结果
+        state.groupFilter = state.cloned.length ? CLONED_GROUP : '';
+        state.search = '';
+        $('voiceSearch').value = '';
+        renderVoiceGroups();
+        renderVoiceList();
+        toast(state.cloned.length
+          ? '已拉取 ' + state.cloned.length + ' 个复刻音色，点击即可选用'
+          : '账号下还没有复刻音色 —— 可先去百炼控制台「声音复刻」创建', 3000);
+      } catch (e) {
+        showError('拉取复刻音色失败：' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '⟳ 拉取复刻音色';
+      }
+    }
+
+    function selectVoice(id, silent) {
+      state.voice = id;
+      $('voiceInput').value = id;
+      qsa('.voice-chip').forEach((c) => c.classList.toggle('on', c.dataset.id === id));
+      if (!silent) saveConfig();
+    }
+
+    /* ==================== 参数适用性（按模型家族显示/隐藏）==================== */
+    function applyFamilyFields() {
+      qsa('[data-fam]').forEach((el) => {
+        const fams = el.dataset.fam.split(/\s+/);
+        el.classList.toggle('hidden', fams.indexOf(state.family) < 0);
+      });
+      $('familyHint').textContent = FAMILY_HINT[state.family] || '';
+      $('paramFamHint').textContent = state.family === 'qwen-tts' ? '该模型仅支持语种参数' : '';
+      syncBitRate();
+    }
+
+    function syncBitRate() {
+      const isOpus = $('pFormat').value === 'opus';
+      const inp = $('pBitRate');
+      inp.disabled = !isOpus;
+      $('bitRateGroup').style.opacity = isOpus ? '1' : '0.5';
+    }
+
+    function syncAigcFields() {
+      $('aigcGrid').style.display = $('pAigcTag').checked ? '' : 'none';
+    }
+
+    function syncSwitchUI() {
+      [['streamSwitch', 'streamOn'], ['ssmlSwitch', 'pEnableSsml'], ['tsSwitch', 'pWordTs'], ['aigcSwitch', 'pAigcTag']].forEach(([sw, cb]) => {
+        const on = $(cb).checked;
+        $(sw).classList.toggle('on', on);
+      });
+      // 字级时间戳仅流式可用
+      const canTs = $('streamOn').checked;
+      $('tsSwitch').classList.toggle('disabled', !canTs);
+      if (!canTs && $('pWordTs').checked) { $('pWordTs').checked = false; }
+      syncAigcFields();
+      syncBitRate();
+    }
+
+    /* ==================== 参数收集 ==================== */
+    function buildInput() {
+      const input = {
+        text: $('ttsText').value.trim(),
+        voice: $('voiceInput').value.trim()
+      };
+
+      if (state.family === 'qwen-tts') {
+        input.language_type = $('pLanguageType').value;
+        return input;
+      }
+
+      input.format = $('pFormat').value;
+      input.sample_rate = Number($('pSampleRate').value);
+      input.volume = Number($('pVolume').value);
+      input.rate = Number($('pRate').value);
+      input.pitch = Number($('pPitch').value);
+
+      if (input.format === 'opus') {
+        const br = Number($('pBitRate').value);
+        if (isFinite(br) && br >= 6 && br <= 510) input.bit_rate = Math.round(br);
+      }
+
+      const seed = $('pSeed').value.trim();
+      if (seed !== '') {
+        const s = Number(seed);
+        if (isFinite(s) && s >= 0 && s <= 65535) input.seed = Math.round(s);
+      }
+
+      const lh = $('pLangHints').value;
+      if (lh) input.language_hints = [lh];
+
+      const instr = $('pInstruction').value.trim();
+      if (instr) input.instruction = instr;
+
+      if ($('pEnableSsml').checked) input.enable_ssml = true;
+      if ($('pWordTs').checked && $('streamOn').checked) input.word_timestamp_enabled = true;
+
+      if ($('pAigcTag').checked) {
+        input.enable_aigc_tag = true;
+        const prop = $('pAigcPropagator').value.trim();
+        const pid = $('pAigcPropagateId').value.trim();
+        if (prop) input.aigc_propagator = prop;
+        if (pid) input.aigc_propagate_id = pid;
+      }
+
+      const hot = $('pHotFix').value.trim();
+      if (hot) {
+        try {
+          const parsed = JSON.parse(hot);
+          if (parsed && typeof parsed === 'object') input.hot_fix = parsed;
+        } catch (e) {
+          throw new Error('hot_fix 不是合法的 JSON：' + e.message);
+        }
+      }
+
+      return input;
+    }
+
+    function buildRequest() {
+      const model = currentModel();
+      const input = buildInput();
+      return {
+        url: $('apiUrl').value.trim() || DEFAULT_URL,
+        apiKey: $('apiKey').value.trim(),
+        family: model.family,
+        model: model.id,
+        input: input,
+        stream: $('streamOn').checked,
+        live: true,
+        paramPlacement: $('pPlacement').value,
+        timeoutSec: Number($('pTimeout').value) || 120
+      };
+    }
+
+    /** 前端预览实际下发到上游的 body（与 server.js buildTtsBody 一致） */
+    function upstreamBodyPreview() {
+      let req;
+      try { req = buildRequest(); } catch (e) { return '（参数有误：' + e.message + '）'; }
+      let body;
+      if (req.paramPlacement === 'parameters') {
+        const { text, voice, ...rest } = req.input;
+        body = { model: req.model, input: { text: text, voice: voice } };
+        if (Object.keys(rest).length) body.parameters = rest;
+      } else {
+        body = { model: req.model, input: req.input };
+      }
+      return JSON.stringify(body, null, 2);
+    }
+
+    function updateReqPreview() {
+      $('reqPreview').textContent = upstreamBodyPreview();
+      const m = currentModel();
+      let path = '/api/v1/services/audio/tts/SpeechSynthesizer';
+      if (m.family === 'qwen-tts' || m.family === 'minimax') path = '/api/v1/services/aigc/multimodal-generation/generation';
+      const base = ($('apiUrl').value.trim() || DEFAULT_URL).replace(/\/+$/, '');
+      let full = base + path;
+      if (/\/services\//i.test(base)) full = base;
+      else if (/\/api\/v1$/i.test(base)) full = base + path.replace(/^\/api\/v1/, '');
+      // 域名已在输入框里，这里只显示路径，避免长 URL 挤成一条看不清的小字
+      $('endpointPreview').textContent = full.replace(/^https?:\/\/[^/]+/i, '') || full;
+      $('endpointPreview').title = '完整端点：' + full;
+      $('modelTag').textContent = m.id;
+    }
+
+    /* ==================== 本地存储 ==================== */
+    function collectConfig() {
+      return {
+        apiUrl: $('apiUrl').value,
+        apiKey: $('apiKey').value,
+        modelId: state.modelId,
+        voice: state.voice,
+        text: $('ttsText').value,
+        format: $('pFormat').value,
+        sampleRate: $('pSampleRate').value,
+        volume: $('pVolume').value,
+        rate: $('pRate').value,
+        pitch: $('pPitch').value,
+        bitRate: $('pBitRate').value,
+        seed: $('pSeed').value,
+        langHints: $('pLangHints').value,
+        languageType: $('pLanguageType').value,
+        instruction: $('pInstruction').value,
+        stream: $('streamOn').checked,
+        placement: $('pPlacement').value,
+        enableSsml: $('pEnableSsml').checked,
+        wordTs: $('pWordTs').checked,
+        aigcTag: $('pAigcTag').checked,
+        aigcPropagator: $('pAigcPropagator').value,
+        aigcPropagateId: $('pAigcPropagateId').value,
+        hotFix: $('pHotFix').value,
+        timeout: $('pTimeout').value
+      };
+    }
+
+    function saveConfig() {
+      try { localStorage.setItem(LS_CONFIG, JSON.stringify(collectConfig())); } catch (e) { /* 隐私模式下忽略 */ }
+    }
+
+    function applyConfig(c) {
+      // 注意：c 可能为 null（首次访问），不能提前 return ——
+      // 否则默认音色不会回填到 voice 输入框
+      c = c || {};
+      if (c.apiUrl) $('apiUrl').value = c.apiUrl;
+      if (c.apiKey) $('apiKey').value = c.apiKey;
+      if (c.modelId && MODELS.some((m) => m.id === c.modelId)) state.modelId = c.modelId;
+      $('modelSelect').value = state.modelId;
+      state.family = currentModel().family;
+      $('ttsText').value = c.text != null ? c.text : '';
+      if (c.format) $('pFormat').value = c.format;
+      if (c.sampleRate) $('pSampleRate').value = c.sampleRate;
+      if (c.volume != null) $('pVolume').value = c.volume;
+      if (c.rate != null) $('pRate').value = c.rate;
+      if (c.pitch != null) $('pPitch').value = c.pitch;
+      if (c.bitRate != null) $('pBitRate').value = c.bitRate;
+      if (c.seed != null) $('pSeed').value = c.seed;
+      if (c.langHints != null) $('pLangHints').value = c.langHints;
+      if (c.languageType) $('pLanguageType').value = c.languageType;
+      if (c.instruction != null) $('pInstruction').value = c.instruction;
+      if (typeof c.stream === 'boolean') $('streamOn').checked = c.stream;
+      if (c.placement) $('pPlacement').value = c.placement;
+      if (typeof c.enableSsml === 'boolean') $('pEnableSsml').checked = c.enableSsml;
+      if (typeof c.wordTs === 'boolean') $('pWordTs').checked = c.wordTs;
+      if (typeof c.aigcTag === 'boolean') $('pAigcTag').checked = c.aigcTag;
+      if (c.aigcPropagator != null) $('pAigcPropagator').value = c.aigcPropagator;
+      if (c.aigcPropagateId != null) $('pAigcPropagateId').value = c.aigcPropagateId;
+      if (c.hotFix != null) $('pHotFix').value = c.hotFix;
+      if (c.timeout != null) $('pTimeout').value = c.timeout;
+
+      // 音色：优先用保存值，其次模型默认值
+      const groups = lib[state.modelId] || [];
+      const ids = [];
+      groups.forEach((g) => g.voices.forEach((v) => ids.push(v.id)));
+      state.cloned.forEach((v) => ids.push(v.voiceId));   // 复刻音色同样可作为保存值恢复
+      const wanted = c.voice || currentModel().defaultVoice;
+      state.voice = (wanted && ids.indexOf(wanted) >= 0) ? wanted : (ids[0] || wanted || '');
+      $('voiceInput').value = state.voice;
+    }
+
+    function loadConfig() {
+      let c = null;
+      try { c = JSON.parse(localStorage.getItem(LS_CONFIG) || 'null'); } catch (e) { c = null; }
+      applyConfig(c);
+      if (!c) {
+        $('apiUrl').value = DEFAULT_URL;
+        $('ttsText').value = DEFAULT_TEXT;
+      }
+      syncSliderLabels();
+      syncSwitchUI();
+      applyFamilyFields();
+    }
+
+    /* ==================== 历史 ==================== */
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem(LS_HISTORY) || '[]') || []; } catch (e) { return []; }
+    }
+    function saveHistory(list) {
+      try { localStorage.setItem(LS_HISTORY, JSON.stringify(list.slice(0, 20))); } catch (e) { /* 忽略 */ }
+    }
+    function renderHistory() {
+      const list = loadHistory();
+      $('histCount').textContent = list.length + ' 条';
+      const body = $('histBody');
+      if (!list.length) {
+        body.innerHTML = '<tr class="empty-row"><td colspan="6">暂无记录，合成一次试试</td></tr>';
+        return;
+      }
+      body.innerHTML = list.map((h, i) =>
+        '<tr>' +
+        '<td class="mono">' + esc(fmtTime(h.ts)) + '</td>' +
+        '<td title="' + esc(h.model + ' · ' + h.voice) + '">' + esc(h.voice || '—') + ' <span style="color:var(--text-muted)">' + esc((h.model || '').replace('qwen-audio-', 'q-a-')) + '</span></td>' +
+        '<td class="mono ok">' + esc(fmtMs(h.ttfaMs)) + '</td>' +
+        '<td class="mono">' + esc(fmtMs(h.totalMs)) + '</td>' +
+        '<td class="mono">' + esc(fmtBytes(h.bytes)) + '</td>' +
+        '<td><button type="button" class="play-mini" data-i="' + i + '">试听</button></td>' +
+        '</tr>'
+      ).join('');
+    }
+    function pushHistory(entry) {
+      const list = loadHistory();
+      list.unshift(entry);
+      saveHistory(list);
+      renderHistory();
+    }
+
+    /* ==================== 波形与播放 ==================== */
+    const canvas = $('waveCanvas');
+    const cctx = canvas.getContext('2d');
+
+    function sizeCanvas() {
+      const box = $('waveBox');
+      const dpr = window.devicePixelRatio || 1;
+      const w = box.clientWidth, h = box.clientHeight;
+      if (!w || !h) return;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawWave(currentProgress());
+    }
+
+    function computePeaks(audioBuffer, buckets) {
+      const data = audioBuffer.getChannelData(0);
+      const step = Math.floor(data.length / buckets) || 1;
+      const out = new Array(buckets);
+      for (let i = 0; i < buckets; i++) {
+        let max = 0;
+        const start = i * step;
+        const end = Math.min(start + step, data.length);
+        for (let j = start; j < end; j++) {
+          const v = Math.abs(data[j]);
+          if (v > max) max = v;
+        }
+        out[i] = max;
+      }
+      // 归一化，避免过小看不清
+      let peak = 0;
+      for (let i = 0; i < out.length; i++) if (out[i] > peak) peak = out[i];
+      if (peak > 0) for (let i = 0; i < out.length; i++) out[i] = Math.min(1, Math.pow(out[i] / peak, 0.75));
+      return out;
+    }
+
+    function drawWave(progress) {
+      const w = $('waveBox').clientWidth, h = $('waveBox').clientHeight;
+      if (!w || !h) return;
+      cctx.clearRect(0, 0, w, h);
+      const n = peaks.length;
+      if (!n) return;
+      const barW = w / n;
+      for (let i = 0; i < n; i++) {
+        const bh = Math.max(1.5, peaks[i] * (h - 14));
+        const played = (i / n) <= progress;
+        cctx.fillStyle = played ? 'rgba(129, 140, 248, 0.95)' : 'rgba(255, 255, 255, 0.2)';
+        cctx.fillRect(i * barW, (h - bh) / 2, Math.max(1, barW - 1), bh);
+      }
+    }
+
+    function currentProgress() {
+      const a = $('audioEl');
+      if (!a.duration || !isFinite(a.duration)) return 0;
+      return a.currentTime / a.duration;
+    }
+
+    function updateTimeLabel() {
+      const a = $('audioEl');
+      const dur = isFinite(a.duration) ? a.duration : 0;
+      $('timeLabel').textContent = fmtClock(a.currentTime) + ' / ' + fmtClock(dur);
+      $('seekFill').style.width = (dur ? (a.currentTime / dur) * 100 : 0) + '%';
+    }
+
+    function tick() {
+      updateTimeLabel();
+      drawWave(currentProgress());
+      if (!$('audioEl').paused) rafId = requestAnimationFrame(tick);
+    }
+
+    async function loadAudioIntoPlayer(url, format) {
+      const a = $('audioEl');
+      a.src = url;
+      a.load();
+      $('playBtn').disabled = false;
+      $('dlBtn').disabled = false;
+      $('waveHint').classList.add('hide');
+      $('waveHint').textContent = '';
+
+      peaks = [];
+      decodedBuffer = null;
+      let durMs = null;
+
+      // 1) 取音频字节（只有服务端缓存的同源 URL 才能读到）
+      let raw = null;
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        raw = await r.arrayBuffer();
+      } catch (e) {
+        const gone = /404/.test(e.message);
+        $('waveHint').classList.remove('hide');
+        $('waveHint').textContent = gone
+          ? '音频已失效（服务重启或缓存被淘汰），请重新合成'
+          : '无法读取音频字节（上游直链跨域），不影响播放';
+        if (gone) { $('playBtn').disabled = true; $('dlBtn').disabled = true; }
+        sizeCanvas();
+        return null;
+      }
+
+      // 2) 解码 → 波形 + 精确时长
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) {
+          const ac = new AC();
+          decodedBuffer = await ac.decodeAudioData(raw.slice(0));
+          durMs = decodedBuffer.duration * 1000;
+          const buckets = Math.max(60, Math.min(240, Math.round($('waveBox').clientWidth / 3)));
+          peaks = computePeaks(decodedBuffer, buckets);
+          ac.close();
+        }
+      } catch (e) {
+        peaks = [];
+        $('waveHint').classList.remove('hide');
+        if (format === 'pcm') {
+          $('waveHint').textContent = 'PCM 裸流浏览器无法解码播放，建议改用 mp3 / wav';
+          $('playBtn').disabled = true;
+        } else {
+          $('waveHint').textContent = '该格式无法解析波形，但仍可播放';
+        }
+      }
+
+      sizeCanvas();
+
+      $('audioMeta').textContent = (format || '').toUpperCase() + (durMs ? ' · ' + (durMs / 1000).toFixed(2) + 's' : '');
+
+      const meta = currentAudio || {};
+      meta.durationMs = durMs;
+      currentAudio = meta;
+
+      // 音频时长与实时率
+      if (durMs) {
+        setMetric('mDuration', (durMs / 1000).toFixed(2), 's', '');
+        if (meta.totalMs) {
+          const rtf = meta.totalMs / durMs;
+          setMetric('mRtf', rtf.toFixed(2), '×', rtf < 1 ? 'good' : (rtf < 3 ? '' : 'warn'));
+        }
+      } else {
+        setMetric('mDuration', '—');
+      }
+      return durMs;
+    }
+
+    /* ==================== 运行状态 UI ==================== */
+    function setRunning(on) {
+      running = on;
+      $('runBtn').disabled = on;
+      $('stopBtn').disabled = !on;
+      $('runStatus').classList.toggle('show', on);
+    }
+
+    function resetMetrics() {
+      ['mTtfa', 'mTotal', 'mDuration', 'mRtf', 'mBytes', 'mChars'].forEach((id) => setMetric(id, '—'));
+      $('extraChips').innerHTML = '';
+    }
+
+    /* ==================== 合成主流程 ==================== */
+    async function runSynthesis() {
+      if (running) return;
+
+      let req;
+      try {
+        req = buildRequest();
+      } catch (e) {
+        return showError(e.message);
+      }
+      if (!req.apiKey) return showError('请先填写 API Key');
+      if (!req.input.text) return showError('请先输入要合成的文本');
+      if (!req.input.voice) return showError('请先选择或填写音色（voice）');
+
+      $('errorBox').classList.remove('show');
+      resetMetrics();
+      setRunning(true);
+      $('runText').textContent = '正在连接…';
+      $('runDetail').textContent = '';
+      updateReqPreview();
+
+      controller = new AbortController();
+      const t0 = performance.now();
+
+      try {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req),
+          signal: controller.signal
+        });
+
+        if (res.status === 404) {
+          throw new Error('服务端没有 /api/tts 接口 —— 请先重启服务：Ctrl+C 后重新执行 npm start');
+        }
+        const ctype = res.headers.get('content-type') || '';
+        if (!res.ok && !/event-stream/i.test(ctype)) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || ('HTTP ' + res.status));
+        }
+
+        let donePayload = null;
+
+        if (/event-stream/i.test(ctype)) {
+          // ---- 解析服务端 SSE：progress / done / error ----
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop() || '';
+            for (const line of lines) {
+              const t = line.trim();
+              if (!t.startsWith('data:')) continue;
+              const payload = t.slice(5).trim();
+              if (!payload || payload === '[DONE]') continue;
+              let json;
+              try { json = JSON.parse(payload); } catch { continue; }
+
+              if (json.type === 'start') {
+                $('runText').textContent = '已连接，等待首包…';
+              } else if (json.type === 'progress') {
+                const elapsed = (performance.now() - t0) / 1000;
+                $('runText').textContent = '合成中… 已收 ' + json.chunks + ' 块 / ' + json.sentences + ' 句';
+                $('runDetail').textContent = json.kb + ' KB · ' + elapsed.toFixed(1) + 's';
+              } else if (json.type === 'warn') {
+                toast(json.message, 3200);
+              } else if (json.type === 'done') {
+                donePayload = json;
+              } else if (json.type === 'error') {
+                throw new Error(json.error || '合成失败');
+              }
+            }
+          }
+        } else {
+          // ---- 非 SSE 回退（live 关闭或代理异常）----
+          donePayload = await res.json();
+          if (donePayload && donePayload.type === 'error') throw new Error(donePayload.error);
+        }
+
+        if (!donePayload || !donePayload.metrics) throw new Error('服务端没有返回合成结果');
+
+        const m = donePayload.metrics;
+        const totalMs = m.totalMs != null ? m.totalMs : Math.round(performance.now() - t0);
+
+        if (!donePayload.audioUrl && !donePayload.remoteUrl) throw new Error('上游没有返回音频数据');
+
+        currentAudio = {
+          url: donePayload.audioUrl || donePayload.remoteUrl,
+          bytes: m.bytes, format: m.format, params: req.input,
+          model: req.model, voice: req.input.voice, ts: Date.now(), totalMs: totalMs
+        };
+
+        // 指标
+        $('mTtfa').innerHTML = Math.round(m.ttfaMs) + '<span class="unit">ms</span>';
+        $('mTtfa').className = 'metric-value ' + (m.ttfaMs < 500 ? 'good' : m.ttfaMs < 1500 ? '' : 'warn');
+        $('mTotal').innerHTML = Math.round(totalMs) + '<span class="unit">ms</span>';
+        $('mBytes').textContent = fmtBytes(m.bytes);
+        $('mChars').innerHTML = (m.chars != null ? m.chars : '—') + (m.chars != null ? '<span class="unit">字</span>' : '');
+
+        const chips = [];
+        chips.push('<span class="chip"><i>模式</i><b>' + (m.streamed ? '流式' : '非流式') + '</b></span>');
+        chips.push('<span class="chip"><i>分片</i><b>' + (m.chunks || 0) + '</b></span>');
+        if (m.sentences) chips.push('<span class="chip"><i>句子</i><b>' + m.sentences + '</b></span>');
+        chips.push('<span class="chip"><i>格式</i><b>' + esc(m.format) + ' / ' + m.sampleRate + 'Hz</b></span>');
+        if (m.requestId) chips.push('<span class="chip"><i>request_id</i><b>' + esc(String(m.requestId).slice(0, 18)) + '</b></span>');
+        $('extraChips').innerHTML = chips.join('');
+
+        $('runText').textContent = '合成完成';
+        $('runDetail').textContent = totalMs + ' ms';
+        setRunning(false);
+
+        const durMs = await loadAudioIntoPlayer(donePayload.audioUrl || donePayload.remoteUrl, m.format);
+        if (!donePayload.audioUrl) {
+          toast('音频未缓存到本地，使用上游直链（24 小时后失效）', 3200);
+        }
+
+        pushHistory({
+          ts: Date.now(),
+          model: req.model,
+          voice: req.input.voice,
+          family: req.family,
+          ttfaMs: m.ttfaMs,
+          totalMs: totalMs,
+          bytes: m.bytes,
+          durationMs: durMs,
+          format: m.format,
+          audioUrl: donePayload.audioUrl,
+          params: req.input
+        });
+
+        saveConfig();
+        $('audioEl').play().catch(() => { /* 自动播放被拦截时忽略 */ });
+      } catch (err) {
+        setRunning(false);
+        if (err.name === 'AbortError') {
+          $('runText').textContent = '已停止';
+          toast('已停止合成');
+        } else {
+          showError(err.message || String(err));
+          $('runText').textContent = '合成失败';
+        }
+      } finally {
+        controller = null;
+      }
+    }
+
+    /* ==================== 事件绑定 ==================== */
+    function bindEvents() {
+      // 连接与模型
+      $('apiUrl').addEventListener('input', () => { updateReqPreview(); saveConfig(); });
+      $('apiKey').addEventListener('input', saveConfig);
+      $('keyToggle').addEventListener('click', () => {
+        const el = $('apiKey');
+        el.type = el.type === 'password' ? 'text' : 'password';
+      });
+
+      $('modelSelect').addEventListener('change', () => {
+        state.modelId = $('modelSelect').value;
+        state.family = currentModel().family;
+        state.groupFilter = '';
+        const groups = lib[state.modelId] || [];
+        const ids = [];
+        groups.forEach((g) => g.voices.forEach((v) => ids.push(v.id)));
+        state.voice = currentModel().defaultVoice || ids[0] || '';
+        $('voiceInput').value = state.voice;
+        renderVoiceGroups();
+        renderVoiceList();
+        applyFamilyFields();
+        updateReqPreview();
+        saveConfig();
+      });
+
+      // 音色
+      $('voiceSearch').addEventListener('input', () => {
+        state.search = $('voiceSearch').value;
+        renderVoiceList();
+      });
+      $('voiceGroups').addEventListener('click', (e) => {
+        const btn = e.target.closest('.vgroup');
+        if (!btn) return;
+        state.groupFilter = btn.dataset.g || '';
+        renderVoiceGroups();
+        renderVoiceList();
+      });
+      $('voiceList').addEventListener('click', (e) => {
+        const chip = e.target.closest('.voice-chip');
+        if (!chip) return;
+        selectVoice(chip.dataset.id);
+        updateReqPreview();
+      });
+      $('voiceInput').addEventListener('input', () => {
+        state.voice = $('voiceInput').value.trim();
+        qsa('.voice-chip').forEach((c) => c.classList.toggle('on', c.dataset.id === state.voice));
+        updateReqPreview();
+      });
+      $('voiceInput').addEventListener('change', saveConfig);
+      $('voiceQuick').addEventListener('change', () => {
+        const v = $('voiceQuick').value.trim();
+        if (v) { selectVoice(v); updateReqPreview(); }
+      });
+      $('fetchClonedBtn').addEventListener('click', fetchClonedVoices);
+
+      // 文本
+      $('ttsText').addEventListener('input', () => {
+        const n = $('ttsText').value.length;
+        const cc = $('charCount');
+        cc.textContent = n + ' 字';
+        cc.classList.toggle('over', n > 2000);
+      });
+      $('ttsText').addEventListener('change', saveConfig);
+
+      // 标签按钮：全部平铺显示（这些是高频调试入口，不做折叠以免多点一次）
+      const tagRow = $('tagRow');
+      const mkBtn = (tag) =>
+        '<button type="button" class="tag-btn" data-tag="[' + tag + ']" title="插入 [' + tag + ']">[' + tag + ']</button>';
+      tagRow.innerHTML =
+        '<span class="tag-lab">情感</span>' + EMOTION_TAGS.map(mkBtn).join('') +
+        '<span class="tag-lab" style="margin-left:6px">拟声</span>' + SOUND_TAGS.map(mkBtn).join('');
+
+      tagRow.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tag-btn');
+        if (!btn) return;
+        const ta = $('ttsText');
+        const ins = btn.dataset.tag;
+        const s = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+        const en = ta.selectionEnd != null ? ta.selectionEnd : ta.value.length;
+        ta.value = ta.value.slice(0, s) + ins + ta.value.slice(en);
+        ta.selectionStart = ta.selectionEnd = s + ins.length;
+        ta.focus();
+        ta.dispatchEvent(new Event('input'));
+        saveConfig();
+      });
+
+      // 参数控件
+      [['pVolume', 'pVolumeVal', (v) => v], ['pRate', 'pRateVal', (v) => Number(v).toFixed(2)], ['pPitch', 'pPitchVal', (v) => Number(v).toFixed(2)]]
+        .forEach(([id, out, fmt]) => {
+          $(id).addEventListener('input', () => {
+            $(out).textContent = fmt($(id).value);
+            updateReqPreview();
+          });
+          $(id).addEventListener('change', saveConfig);
+        });
+
+      ['pFormat', 'pSampleRate', 'pLangHints', 'pLanguageType', 'pPlacement', 'pBitRate', 'pSeed', 'pInstruction', 'pTimeout', 'pAigcPropagator', 'pAigcPropagateId', 'pHotFix']
+        .forEach((id) => {
+          $(id).addEventListener('change', () => { updateReqPreview(); saveConfig(); });
+          $(id).addEventListener('input', updateReqPreview);
+        });
+      $('pFormat').addEventListener('change', syncBitRate);
+
+      // 开关
+      // 注意：.switch 是 <label> 包裹 <input>，点击 label 会由浏览器默认行为切换 input
+      // 并派发 change 事件。这里只需监听 change，绝不能再手动 toggle 一次（会互相抵消）。
+      ['streamOn', 'pEnableSsml', 'pWordTs', 'pAigcTag'].forEach((id) => {
+        $(id).addEventListener('change', () => {
+          syncSwitchUI();
+          updateReqPreview();
+          saveConfig();
+        });
+      });
+
+      // 操作按钮
+      $('runBtn').addEventListener('click', runSynthesis);
+      $('stopBtn').addEventListener('click', () => { if (controller) controller.abort(); });
+
+      $('curlBtn').addEventListener('click', () => {
+        let req;
+        try { req = buildRequest(); } catch (e) { return showError(e.message); }
+        let body;
+        if (req.paramPlacement === 'parameters') {
+          const { text, voice, ...rest } = req.input;
+          body = { model: req.model, input: { text: text, voice: voice } };
+          if (Object.keys(rest).length) body.parameters = rest;
+        } else {
+          body = { model: req.model, input: req.input };
+        }
+        const m = currentModel();
+        const path = (m.family === 'qwen-tts' || m.family === 'minimax')
+          ? '/api/v1/services/aigc/multimodal-generation/generation'
+          : '/api/v1/services/audio/tts/SpeechSynthesizer';
+        let base = req.url.replace(/\/+$/, '');
+        let url = base + path;
+        if (/\/services\//i.test(base)) url = base;
+        else if (/\/api\/v1$/i.test(base)) url = base + path.replace(/^\/api\/v1/, '');
+        const head = req.stream ? " \\\n  -H 'X-DashScope-SSE: enable'" : '';
+        const cmd = "curl -X POST '" + url + "' \\\n  -H 'Authorization: Bearer $DASHSCOPE_API_KEY' \\\n  -H 'Content-Type: application/json'" + head + " \\\n  -d '" + JSON.stringify(body) + "'";
+        navigator.clipboard.writeText(cmd).then(
+          () => toast('cURL 已复制到剪贴板'),
+          () => showError('复制失败，请手动从「实际下发的请求体」复制')
+        );
+      });
+
+      $('saveBtn').addEventListener('click', () => { saveConfig(); toast('配置已保存到本地'); });
+      $('resetBtn').addEventListener('click', () => {
+        try { localStorage.removeItem(LS_CONFIG); } catch (e) { /* 忽略 */ }
+        location.reload();
+      });
+      $('clearHistBtn').addEventListener('click', () => {
+        saveHistory([]);
+        renderHistory();
+        toast('历史已清空');
+      });
+
+      // 历史试听
+      $('histBody').addEventListener('click', (e) => {
+        const btn = e.target.closest('.play-mini');
+        if (!btn) return;
+        const list = loadHistory();
+        const h = list[Number(btn.dataset.i)];
+        if (!h) return;
+        if (!h.audioUrl) return toast('该记录没有本地缓存音频');
+        currentAudio = { url: h.audioUrl, bytes: h.bytes, format: h.format, totalMs: h.totalMs, model: h.model, voice: h.voice };
+        loadAudioIntoPlayer(h.audioUrl, h.format).then(() => {
+          $('mTtfa').innerHTML = Math.round(h.ttfaMs) + '<span class="unit">ms</span>';
+          $('mTotal').innerHTML = Math.round(h.totalMs) + '<span class="unit">ms</span>';
+          $('mBytes').textContent = fmtBytes(h.bytes);
+          $('audioEl').play().catch(() => {});
+        }).catch(() => toast('音频已失效（服务重启或缓存淘汰）'));
+      });
+
+      // 播放器
+      $('playBtn').addEventListener('click', () => {
+        const a = $('audioEl');
+        if (a.paused) a.play().catch(() => toast('播放失败，可能音频已失效')); else a.pause();
+      });
+      $('audioEl').addEventListener('play', () => { $('playBtn').textContent = '❚❚'; cancelAnimationFrame(rafId); tick(); });
+      $('audioEl').addEventListener('pause', () => { $('playBtn').textContent = '▶'; cancelAnimationFrame(rafId); });
+      $('audioEl').addEventListener('ended', () => { $('playBtn').textContent = '▶'; updateTimeLabel(); drawWave(0); });
+      $('audioEl').addEventListener('loadedmetadata', updateTimeLabel);
+
+      const seekTo = (clientX) => {
+        const a = $('audioEl');
+        if (!a.duration || !isFinite(a.duration)) return;
+        const r = $('seek').getBoundingClientRect();
+        const p = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+        a.currentTime = p * a.duration;
+        updateTimeLabel();
+        drawWave(p);
+      };
+      $('seek').addEventListener('click', (e) => seekTo(e.clientX));
+      // 点波形区也可定位（按波形区自身坐标换算，不能复用 seek 的 rect）
+      $('waveBox').addEventListener('click', (e) => {
+        const a = $('audioEl');
+        if (!peaks.length || !a.duration || !isFinite(a.duration)) return;
+        const r = $('waveBox').getBoundingClientRect();
+        const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+        a.currentTime = p * a.duration;
+        updateTimeLabel();
+        drawWave(p);
+      });
+
+      $('dlBtn').addEventListener('click', () => {
+        if (!currentAudio || !currentAudio.url) return;
+        const a = document.createElement('a');
+        a.href = currentAudio.url;
+        a.download = 'tts_' + Date.now() + '.' + (currentAudio.format || 'mp3');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        toast('已开始下载');
+      });
+
+      // 尺寸变化重绘
+      if (window.ResizeObserver) {
+        new ResizeObserver(() => sizeCanvas()).observe($('waveBox'));
+      } else {
+        window.addEventListener('resize', sizeCanvas);
+      }
+
+      // 快捷键：Ctrl/Cmd + Enter 合成
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          runSynthesis();
+        }
+      });
+    }
+
+    function syncSliderLabels() {
+      $('pVolumeVal').textContent = $('pVolume').value;
+      $('pRateVal').textContent = Number($('pRate').value).toFixed(2);
+      $('pPitchVal').textContent = Number($('pPitch').value).toFixed(2);
+    }
+
+    /* ==================== 初始化 ==================== */
+    async function checkServer() {
+      const banner = $('connBanner');
+      let health = null;
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' });
+        health = await r.json();
+        if (!health || !health.ok) throw new Error('bad');
+      } catch (e) {
+        banner.style.display = '';
+        banner.innerHTML = '⚠️ 未连接到本地服务。请通过 <b>http://localhost:3210/tts.html</b> 访问，或在项目目录执行 <code>npm start</code>';
+        return;
+      }
+      // 旧版服务端没有 tts 能力，也没有 /api/tts 接口
+      const feats = Array.isArray(health.features) ? health.features : [];
+      if (feats.indexOf('tts') < 0) {
+        banner.style.display = '';
+        banner.innerHTML = '⚠️ 当前服务端还是旧版本（没有 <code>/api/tts</code> 接口）。请重启服务：<b>Ctrl+C 后重新执行 npm start</b>';
+      }
+    }
+
+    function init() {
+      buildModelSelect();
+      loadCloned();
+      loadConfig();
+      renderVoiceGroups();
+      renderVoiceList();
+      bindEvents();
+      syncSliderLabels();
+      syncSwitchUI();
+      applyFamilyFields();
+      updateReqPreview();
+      renderHistory();
+      $('ttsText').dispatchEvent(new Event('input'));
+      sizeCanvas();
+
+      // 预填音频元信息
+      const a = $('audioEl');
+      a.addEventListener('error', () => {
+        if (a.src && !currentAudio) return;
+        $('waveHint').classList.remove('hide');
+        $('waveHint').textContent = '音频加载失败（可能已被缓存淘汰），请重新合成';
+      });
+
+      checkServer();
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

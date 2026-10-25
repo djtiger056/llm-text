@@ -1,0 +1,5 @@
+# 免提 VAD 服务的依赖（Node 会自动探测解释器；缺依赖时回退为手写/录音模式）
+# 安装：python -m pip install -r vad_service/requirements.txt
+numpy>=1.24
+onnxruntime>=1.16
+websockets>=14

@@ -1,0 +1,2128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>链路联调 · Pipeline Studio</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔗</text></svg>">
+<style>
+  :root {
+    --bg-primary: #0a0e1a;
+    --bg-secondary: #111827;
+    --glass-bg: rgba(255, 255, 255, 0.04);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-hover: rgba(255, 255, 255, 0.07);
+    --accent: #6366f1;
+    --accent-glow: rgba(99, 102, 241, 0.3);
+    --accent-light: #818cf8;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #f87171;
+    --info: #22d3ee;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .bg-effects { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .bg-effects::before {
+    content: '';
+    position: absolute;
+    top: -180px; left: 50%;
+    width: 900px; height: 620px;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.16) 0%, transparent 68%);
+    filter: blur(30px);
+  }
+
+  .container { position: relative; z-index: 1; max-width: 1580px; margin: 0 auto; padding: 18px 22px 40px; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+  .header h1 { font-size: 1.42rem; letter-spacing: -0.02em; font-weight: 650; }
+  .header h1 span { color: var(--accent-light); }
+  .header p { color: var(--text-muted); font-size: 0.76rem; margin-top: 3px; }
+
+  .topnav { display: inline-flex; gap: 3px; padding: 3px; border-radius: 20px; background: var(--glass-bg); border: 1px solid var(--glass-border); }
+  .topnav a {
+    padding: 6px 12px; border-radius: 16px; font-size: 0.78rem; color: var(--text-secondary);
+    text-decoration: none; transition: all 0.18s ease; white-space: nowrap;
+  }
+  .topnav a:hover { background: var(--glass-hover); color: var(--text-primary); }
+  .topnav a.active { background: var(--accent); color: #fff; box-shadow: 0 2px 14px var(--accent-glow); }
+
+  /* ---------- 卡片 ---------- */
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .pipe-grid {
+    display: grid;
+    grid-template-columns: 330px 312px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card-pad { padding: 12px 13px; }
+
+  .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+  .sec-title { font-size: 0.72rem; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .sec-title i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+  .sec-note { font-size: 0.68rem; color: var(--text-muted); }
+
+  /* ---------- 表单 ---------- */
+  .field { margin-bottom: 8px; }
+  .field:last-child { margin-bottom: 0; }
+  label.lbl { display: block; font-size: 0.68rem; color: var(--text-muted); margin-bottom: 3px; letter-spacing: 0.02em; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%;
+    padding: 6px 9px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14); }
+  input::placeholder, textarea::placeholder { color: #4b5563; }
+  textarea { resize: vertical; min-height: 58px; line-height: 1.55; }
+  select option { background: #111827; }
+  .mono { font-family: var(--font-mono); font-size: 0.74rem; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+
+  .check { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; color: var(--text-secondary); cursor: pointer; user-select: none; }
+  .check input { width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer; }
+
+  /* ---------- 按钮 ---------- */
+  .btn {
+    padding: 6px 11px;
+    font-size: 0.75rem;
+    font-family: inherit;
+    color: var(--text-secondary);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: var(--glass-hover); color: var(--text-primary); border-color: rgba(255, 255, 255, 0.16); }
+  .btn:disabled { opacity: 0.42; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 2px 16px var(--accent-glow); }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-light); border-color: var(--accent-light); color: #fff; }
+  .btn-danger { color: var(--danger); }
+  .btn-sm { padding: 3px 8px; font-size: 0.68rem; border-radius: 7px; }
+  .btn-block { width: 100%; }
+
+  /* ---------- 资源池 ---------- */
+  .tabs { display: inline-flex; gap: 3px; padding: 2px; background: rgba(0,0,0,.22); border-radius: 9px; border: 1px solid var(--glass-border); }
+  .tabs button {
+    padding: 4px 10px; font-size: 0.7rem; border: 0; border-radius: 7px; background: transparent;
+    color: var(--text-muted); cursor: pointer; font-family: inherit; transition: all .16s ease;
+  }
+  .tabs button.on { background: var(--accent); color: #fff; }
+
+  .pool-list { display: flex; flex-direction: column; gap: 4px; max-height: 148px; overflow-y: auto; margin-bottom: 8px; }
+  .pool-item {
+    display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+    border: 1px solid var(--glass-border); border-radius: 9px; background: rgba(0,0,0,.14);
+    cursor: pointer; transition: all .16s ease;
+  }
+  .pool-item:hover { background: var(--glass-hover); }
+  .pool-item.active { border-color: var(--accent); background: rgba(99,102,241,.12); }
+  .pool-main { flex: 1; min-width: 0; }
+  .pool-main b { display: block; font-size: 0.76rem; font-weight: 550; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pool-main span { display: block; font-size: 0.66rem; color: var(--text-muted); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pool-del {
+    flex-shrink: 0; width: 18px; height: 18px; line-height: 1; border-radius: 6px; border: 0;
+    background: transparent; color: var(--text-muted); font-size: 14px; cursor: pointer; opacity: 0; transition: all .16s;
+  }
+  .pool-item:hover .pool-del { opacity: 1; }
+  .pool-del:hover { background: rgba(248,113,113,.16); color: var(--danger); }
+  .pool-empty { font-size: 0.7rem; color: var(--text-muted); padding: 10px 4px; text-align: center; border: 1px dashed var(--glass-border); border-radius: 9px; }
+
+  .pool-actions { display: flex; gap: 5px; margin-bottom: 8px; }
+  .pool-actions .btn { flex: 1; text-align: center; }
+
+  .sub-divider { height: 1px; background: var(--glass-border); margin: 9px 0; }
+
+  /* ---------- 链路标识 ---------- */
+  .flow {
+    display: flex; align-items: center; gap: 4px; margin-bottom: 10px;
+    font-size: 0.66rem; color: var(--text-muted);
+  }
+  .flow b {
+    font-weight: 550; padding: 3px 7px; border-radius: 7px;
+    background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.28); color: var(--accent-light);
+    white-space: nowrap;
+  }
+  .flow i { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(99,102,241,.5), rgba(99,102,241,.08)); min-width: 6px; }
+
+  /* ---------- 指标卡 ---------- */
+  .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+  .metric-card {
+    padding: 7px 9px; border-radius: var(--radius-sm);
+    background: rgba(0,0,0,.2); border: 1px solid var(--glass-border);
+  }
+  .m-label { font-size: 0.62rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-value { font-family: var(--font-mono); font-size: 0.98rem; font-weight: 600; margin-top: 1px; letter-spacing: -0.02em; }
+  .m-value small { font-size: 0.6rem; font-weight: 400; color: var(--text-muted); margin-left: 2px; }
+  .v-good { color: var(--success); }
+  .v-warn { color: var(--warning); }
+  .v-bad { color: var(--danger); }
+  .v-accent { color: var(--accent-light); }
+  .v-info { color: var(--info); }
+
+  /* ---------- 文本区 ---------- */
+  .out-box {
+    background: rgba(0,0,0,.28); border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+    padding: 9px 11px; font-size: 0.8rem; line-height: 1.62; min-height: 76px; max-height: 190px;
+    overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary);
+  }
+  .out-box:empty::before { content: attr(data-empty); color: var(--text-muted); font-size: 0.76rem; }
+  .out-box.streaming::after { content: '▍'; color: var(--accent-light); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  details.fold { margin-top: 8px; }
+  details.fold summary {
+    cursor: pointer; font-size: 0.7rem; color: var(--text-muted); list-style: none;
+    padding: 3px 0; user-select: none;
+  }
+  details.fold summary::-webkit-details-marker { display: none; }
+  details.fold summary::before { content: '▸ '; color: var(--accent-light); }
+  details.fold[open] summary::before { content: '▾ '; }
+  .reason-box {
+    margin-top: 5px; padding: 8px 10px; border-radius: var(--radius-sm);
+    background: rgba(99,102,241,.06); border: 1px dashed rgba(99,102,241,.22);
+    font-size: 0.72rem; color: var(--text-secondary); white-space: pre-wrap; max-height: 130px; overflow-y: auto;
+  }
+
+  pre.code {
+    background: rgba(0,0,0,.32); border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+    padding: 8px 10px; font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-secondary);
+    overflow: auto; max-height: 190px; white-space: pre; line-height: 1.5;
+  }
+
+  /* ---------- 时间轴 ---------- */
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.64rem; color: var(--text-muted); margin-bottom: 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend em { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  #timelineCanvas { width: 100%; display: block; }
+
+  /* ---------- 表格 ---------- */
+  .table-wrap { max-height: 208px; overflow: auto; border-radius: var(--radius-sm); border: 1px solid var(--glass-border); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+  thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #131a2b; color: var(--text-muted); font-weight: 500; text-align: left;
+    padding: 5px 7px; border-bottom: 1px solid var(--glass-border); white-space: nowrap; font-size: 0.65rem;
+  }
+  tbody td { padding: 4px 7px; border-bottom: 1px solid rgba(255,255,255,.04); color: var(--text-secondary); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: rgba(255,255,255,.025); }
+  td.num, th.num { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+  td.sent { max-width: 760px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+  .empty-row td { text-align: center; color: var(--text-muted); padding: 14px 8px; font-size: 0.7rem; }
+
+  .chip {
+    display: inline-block; padding: 1px 6px; border-radius: 5px; font-size: 0.62rem;
+    font-family: var(--font-mono); border: 1px solid transparent; white-space: nowrap;
+  }
+  .chip-ok { background: rgba(52,211,153,.12); color: var(--success); border-color: rgba(52,211,153,.25); }
+  .chip-err { background: rgba(248,113,113,.12); color: var(--danger); border-color: rgba(248,113,113,.25); }
+  .chip-wait { background: rgba(148,163,184,.1); color: var(--text-muted); border-color: rgba(148,163,184,.18); }
+  .chip-run { background: rgba(99,102,241,.14); color: var(--accent-light); border-color: rgba(99,102,241,.28); }
+
+  /* ---------- 提示 ---------- */
+  .warn-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .warn-item {
+    font-size: 0.68rem; padding: 5px 9px; border-radius: 8px;
+    background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.22); color: var(--warning);
+  }
+  .warn-item.err { background: rgba(248,113,113,.08); border-color: rgba(248,113,113,.22); color: var(--danger); }
+
+  .conn-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+    padding: 8px 16px; font-size: 0.76rem; text-align: center;
+    background: rgba(248,113,113,.16); border-bottom: 1px solid rgba(248,113,113,.3); color: #fecaca;
+    backdrop-filter: blur(10px);
+  }
+
+  .error-box {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(14px);
+    max-width: 720px; padding: 11px 16px; border-radius: 12px; z-index: 70;
+    background: rgba(30, 12, 16, .94); border: 1px solid rgba(248,113,113,.42); color: #fecaca;
+    font-size: 0.76rem; line-height: 1.55; opacity: 0; pointer-events: none; transition: all .2s ease;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  .error-box.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .error-box b { color: var(--danger); }
+
+  .toast {
+    position: fixed; left: 50%; top: 18px; transform: translateX(-50%) translateY(-12px);
+    padding: 8px 16px; border-radius: 10px; font-size: 0.76rem; z-index: 80;
+    background: rgba(17,24,39,.96); border: 1px solid var(--glass-border); color: var(--text-primary);
+    opacity: 0; pointer-events: none; transition: all .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- 状态与跑马灯 ---------- */
+  .run-bar { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+  .status-dot.running { background: var(--success); box-shadow: 0 0 0 3px rgba(52,211,153,.16); animation: pulse 1.4s ease-in-out infinite; }
+  .status-dot.stopping { background: var(--warning); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .status-text { font-size: 0.7rem; color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .elapsed { font-family: var(--font-mono); font-size: 0.72rem; color: var(--accent-light); }
+
+  .hist-card { margin-top: 12px; }
+
+  @media (max-width: 1320px) {
+    .pipe-grid { grid-template-columns: 300px 290px minmax(0, 1fr); }
+    .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 1120px) {
+    .pipe-grid { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .pool-list { max-height: 180px; }
+  }
+  @media (max-width: 720px) {
+    .container { padding: 14px 12px 30px; }
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .topnav a { padding: 5px 9px; font-size: 0.72rem; }
+  }
+</style>
+</head>
+<body>
+<div class="conn-banner" id="connBanner" style="display:none"></div>
+<div class="bg-effects"></div>
+
+<div class="container">
+  <div class="topbar">
+    <div class="header">
+      <h1>Pipeline <span>Studio</span></h1>
+      <p>LLM 流式出字 → 流式分句 → TTS 逐句合成 → PCM 边收边播 · 自建实时语音链路联调</p>
+    </div>
+    <nav class="topnav">
+      <a href="/">⚡ 速度测试</a>
+      <a href="/chat.html">💬 聊天测试</a>
+      <a href="/tts.html">🎙 语音合成</a>
+      <a href="/pipeline.html" class="active">🔗 链路联调</a>
+      <a href="/voice.html">🎧 语音对话</a>
+    </nav>
+  </div>
+
+  <div class="pipe-grid">
+    <!-- ==================== 左：API 资源池 ==================== -->
+    <div class="col">
+      <section class="glass-card card-pad">
+        <div class="sec-head">
+          <div class="sec-title"><i></i>API 资源池</div>
+          <div class="tabs" id="poolTabs">
+            <button data-tab="llm" class="on">LLM</button>
+            <button data-tab="tts">TTS</button>
+          </div>
+        </div>
+
+        <!-- ---------- LLM 池 ---------- -->
+        <div id="llmPane">
+          <div class="pool-list" id="llmList"></div>
+          <div class="pool-actions">
+            <button class="btn btn-sm" id="btnNewLlm">＋ 新建</button>
+            <button class="btn btn-sm" id="btnImportLlm" title="从测速/聊天页的渠道列表导入">⇩ 导入渠道</button>
+          </div>
+
+          <div class="field"><label class="lbl">名称</label><input type="text" id="llmName" placeholder="留空自动取模型名"></div>
+          <div class="field"><label class="lbl">API 地址</label><input type="text" id="llmUrl" class="mono" placeholder="https://dashscope.aliyuncs.com"></div>
+          <div class="row2">
+            <div class="field"><label class="lbl">API Key</label><input type="password" id="llmKey" class="mono" placeholder="sk-..."></div>
+            <div class="field"><label class="lbl">模型</label><input type="text" id="llmModel" class="mono" placeholder="qwen3-max"></div>
+          </div>
+          <div class="row3">
+            <div class="field"><label class="lbl">max_tokens</label><input type="number" id="llmMaxTokens" value="256" min="1" max="32000"></div>
+            <div class="field"><label class="lbl">temperature</label><input type="number" id="llmTemp" value="0.7" min="0" max="2" step="0.1"></div>
+            <div class="field"><label class="lbl">思考</label>
+              <select id="thinkEnabled">
+                <option value="0">关闭</option>
+                <option value="1">开启</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label class="lbl">System Prompt（可选）</label><textarea id="llmSystem" rows="2" placeholder="你是口语化语音助手，回答简短、不用 Markdown。"></textarea></div>
+
+          <details class="fold">
+            <summary>思考参数（默认按厂商自动识别）</summary>
+            <div class="row3" style="margin-top:6px">
+              <div class="field"><label class="lbl">参数风格</label>
+                <select id="thinkStyle">
+                  <option value="auto">自动识别</option>
+                  <option value="aliyun">阿里云百炼</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="thinking">thinking.type</option>
+                  <option value="none">不发送</option>
+                </select>
+              </div>
+              <div class="field"><label class="lbl">强度</label>
+                <select id="thinkEffort">
+                  <option value="minimal">极简</option>
+                  <option value="low">低</option>
+                  <option value="medium" selected>中</option>
+                  <option value="high">高</option>
+                  <option value="xhigh">极高</option>
+                </select>
+              </div>
+              <div class="field"><label class="lbl">预算 tokens</label><input type="number" id="thinkBudget" placeholder="留空自动"></div>
+            </div>
+            <div class="sec-note" style="margin-top:2px">识别为 <b id="thinkDetected" style="color:var(--accent-light)">—</b></div>
+            <pre class="code" id="thinkPreview" style="margin-top:5px;max-height:110px">—</pre>
+          </details>
+
+          <button class="btn btn-block" id="btnSaveLlm" style="margin-top:9px">💾 保存到资源池</button>
+        </div>
+
+        <!-- ---------- TTS 池 ---------- -->
+        <div id="ttsPane" style="display:none">
+          <div class="pool-list" id="ttsList"></div>
+          <div class="pool-actions">
+            <button class="btn btn-sm" id="btnNewTts">＋ 新建</button>
+            <button class="btn btn-sm" id="btnImportTts" title="从语音合成页的当前配置导入">⇩ 导入配置</button>
+          </div>
+
+          <div class="field"><label class="lbl">名称</label><input type="text" id="ttsName" placeholder="留空自动取模型名"></div>
+          <div class="row2">
+            <div class="field"><label class="lbl">协议</label>
+              <select id="ttsKind">
+                <option value="aliyun">百炼 TTS</option>
+                <option value="openai">OpenAI /audio/speech</option>
+              </select>
+            </div>
+            <div class="field"><label class="lbl">家族</label>
+              <select id="ttsFamily">
+                <option value="qwen-audio-tts">Qwen-Audio-TTS</option>
+                <option value="cosyvoice">CosyVoice</option>
+                <option value="qwen-tts">Qwen-TTS</option>
+                <option value="minimax">MiniMax</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label class="lbl">API 地址</label><input type="text" id="ttsUrl" class="mono" placeholder="https://dashscope.aliyuncs.com"></div>
+          <div class="row2">
+            <div class="field"><label class="lbl">API Key</label><input type="password" id="ttsKey" class="mono" placeholder="sk-..."></div>
+            <div class="field"><label class="lbl">模型</label><input type="text" id="ttsModel" class="mono" placeholder="qwen-audio-3.1-tts-flash"></div>
+          </div>
+          <div class="field">
+            <label class="lbl">音色 <span id="voiceHint" style="color:var(--text-muted)"></span></label>
+            <input type="text" id="ttsVoice" class="mono" list="voiceOptions" placeholder="longanhuan_v3.1">
+            <datalist id="voiceOptions"></datalist>
+          </div>
+          <div class="row3">
+            <div class="field"><label class="lbl">格式</label>
+              <select id="ttsFormat">
+                <option value="pcm">pcm（流式）</option>
+                <option value="mp3">mp3</option>
+                <option value="wav">wav</option>
+                <option value="opus">opus</option>
+              </select>
+            </div>
+            <div class="field"><label class="lbl">采样率</label>
+              <select id="ttsSampleRate">
+                <option value="16000">16000</option>
+                <option value="24000" selected>24000</option>
+                <option value="48000">48000</option>
+              </select>
+            </div>
+            <div class="field"><label class="lbl">语速</label><input type="number" id="ttsRate" value="1" min="0.25" max="4" step="0.05"></div>
+          </div>
+          <div class="row3">
+            <div class="field"><label class="lbl">音调</label><input type="number" id="ttsPitch" value="1" min="0.5" max="2" step="0.05"></div>
+            <div class="field"><label class="lbl">音量</label><input type="number" id="ttsVolume" value="50" min="0" max="100"></div>
+            <div class="field"><label class="lbl">参数位置</label>
+              <select id="ttsPlacement">
+                <option value="input">input</option>
+                <option value="parameters">parameters</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label class="lbl">instruction（≤100 字）</label><input type="text" id="ttsInstruction" placeholder="用温柔的语气，语速稍慢"></div>
+          <button class="btn btn-block" id="btnSaveTts" style="margin-top:9px">💾 保存到资源池</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== 中：链路参数 ==================== -->
+    <div class="col">
+      <section class="glass-card card-pad">
+        <div class="sec-head">
+          <div class="sec-title"><i></i>本次链路</div>
+          <div class="sec-note" id="activeHint">使用左侧当前表单</div>
+        </div>
+
+        <div class="flow"><b>LLM</b><i></i><b>分句</b><i></i><b>TTS</b><i></i><b>播放</b></div>
+
+        <div class="field">
+          <label class="lbl">输入文本</label>
+          <textarea id="prompt" rows="3" placeholder="问点什么，或直接点下面的示例">用三句话介绍一下你自己，口语一点。</textarea>
+          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
+            <button class="btn btn-sm" data-preset="chat">口语陪聊</button>
+            <button class="btn btn-sm" data-preset="long">长文（测并发）</button>
+            <button class="btn btn-sm" data-preset="markdown">含 Markdown</button>
+          </div>
+        </div>
+
+        <div class="sub-divider"></div>
+        <div class="sec-head" style="margin-bottom:7px">
+          <div class="sec-title"><i></i>分句策略</div>
+          <div class="sec-note">首句越短，第一声越快</div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="lbl">首句最小 / 最大</label>
+            <div class="row2"><input type="number" id="splitFirstMin" value="4" min="2" max="40"><input type="number" id="splitFirstMax" value="14" min="4" max="120"></div>
+          </div>
+          <div class="field"><label class="lbl">后续最小 / 最大</label>
+            <div class="row2"><input type="number" id="splitMin" value="8" min="2" max="120"><input type="number" id="splitMax" value="40" min="6" max="300"></div>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="lbl">软分隔起点（字）</label><input type="number" id="splitSoftMin" value="10" min="4" max="200"></div>
+          <div class="field"><label class="lbl">空闲 flush（ms）</label><input type="number" id="splitIdleMs" value="400" min="0" max="5000" step="50"></div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin:2px 0 8px">
+          <label class="check"><input type="checkbox" id="splitSoft" checked>逗号也切</label>
+          <label class="check"><input type="checkbox" id="splitStripMd" checked>清理 Markdown</label>
+          <label class="check"><input type="checkbox" id="splitKeepTags" checked>保留 [情感标签]</label>
+        </div>
+
+        <div class="sub-divider"></div>
+        <div class="sec-head" style="margin-bottom:7px">
+          <div class="sec-title"><i></i>合成与播放</div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="lbl">TTS 并发</label>
+            <div style="display:flex;gap:4px">
+              <label class="check"><input type="radio" name="conc" value="1" checked>1</label>
+              <label class="check"><input type="radio" name="conc" value="2">2</label>
+              <label class="check"><input type="radio" name="conc" value="3">3</label>
+            </div>
+          </div>
+          <div class="field"><label class="lbl">播放 lead（ms）</label>
+            <select id="leadMs">
+              <option value="60">60 · 激进</option>
+              <option value="120" selected>120 · 均衡</option>
+              <option value="200">200 · 稳</option>
+              <option value="320">320 · 极稳</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:2px">
+          <label class="check"><input type="checkbox" id="dryRun">LLM 用内置稿（不花钱）</label>
+          <label class="check"><input type="checkbox" id="skipTts">只调分句（不合成）</label>
+        </div>
+
+        <div class="run-bar">
+          <div class="status-dot" id="statusDot"></div>
+          <div class="status-text" id="statusText">待运行</div>
+          <div class="elapsed" id="runElapsed">—</div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:9px">
+          <button class="btn btn-primary" id="btnRun" style="flex:2">▶ 跑一条链路</button>
+          <button class="btn btn-danger" id="btnStop" style="flex:1" disabled>■ 停止</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== 右：结果 ==================== -->
+    <div class="col">
+      <section class="glass-card card-pad">
+        <div class="sec-head">
+          <div class="sec-title"><i></i>链路时序</div>
+          <div class="sec-note" id="runTag">—</div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric-card"><div class="m-label">LLM TTFT</div><div class="m-value" id="m-llm-ttft">—</div></div>
+          <div class="metric-card"><div class="m-label">首句切分</div><div class="m-value" id="m-first-sent">—</div></div>
+          <div class="metric-card"><div class="m-label">服务端首块音频</div><div class="m-value" id="m-server-ttfa">—</div></div>
+          <div class="metric-card"><div class="m-label">端到端首音</div><div class="m-value v-accent" id="m-e2e">—</div></div>
+          <div class="metric-card"><div class="m-label">首句合成耗时</div><div class="m-value" id="m-first-gap">—</div></div>
+          <div class="metric-card"><div class="m-label">句均 TTS TTFA</div><div class="m-value" id="m-tts-ttfa">—</div></div>
+          <div class="metric-card"><div class="m-label">音频时长</div><div class="m-value" id="m-audio">—</div></div>
+          <div class="metric-card"><div class="m-label">RTF (音频/耗时)</div><div class="m-value" id="m-rtf">—</div></div>
+          <div class="metric-card"><div class="m-label">欠载次数</div><div class="m-value" id="m-underrun">—</div></div>
+          <div class="metric-card"><div class="m-label">总耗时</div><div class="m-value" id="m-total">—</div></div>
+          <div class="metric-card"><div class="m-label">Tokens</div><div class="m-value" id="m-tokens">—</div></div>
+          <div class="metric-card"><div class="m-label">句子数</div><div class="m-value" id="m-sent-count">—</div></div>
+        </div>
+
+        <div class="warn-list" id="warnList"></div>
+
+        <div class="legend">
+          <span><em style="background:#818cf8"></em>首句切分</span>
+          <span><em style="background:#34d399"></em>服务端首块音频</span>
+          <span><em style="background:#22d3ee"></em>端到端首音</span>
+          <span><em style="background:rgba(148,163,184,.5)"></em>排队</span>
+          <span><em style="background:#6366f1"></em>合成中</span>
+          <span><em style="background:#818cf8"></em>可播时长</span>
+        </div>
+        <canvas id="timelineCanvas" height="120"></canvas>
+      </section>
+
+      <section class="glass-card card-pad" style="margin-top:12px">
+        <details class="fold" style="margin-top:0">
+          <summary>本次实际下发的请求体（Key 已打码）</summary>
+          <div class="row2" style="margin-top:6px">
+            <div><div class="sec-note" style="margin-bottom:3px">LLM</div><pre class="code" id="llmBodyPreview">—</pre></div>
+            <div><div class="sec-note" style="margin-bottom:3px">TTS</div><pre class="code" id="ttsBodyPreview">—</pre></div>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <!-- ==================== LLM 输出 ==================== -->
+  <section class="glass-card card-pad hist-card">
+    <div class="sec-head">
+      <div class="sec-title"><i></i>LLM 输出</div>
+      <div class="sec-note" id="llmStat">—</div>
+    </div>
+    <div class="out-box" id="llmOut" data-empty="运行后这里实时显示模型输出…" style="max-height:230px"></div>
+    <details class="fold" id="reasonFold" style="display:none">
+      <summary>🧠 思考过程</summary>
+      <div class="reason-box" id="reasonOut"></div>
+    </details>
+  </section>
+
+  <!-- ==================== 句子明细 ==================== -->
+  <section class="glass-card card-pad hist-card">
+    <div class="sec-head">
+      <div class="sec-title"><i></i>句子级明细</div>
+      <div class="sec-note" id="sentStat">—</div>
+    </div>
+    <div class="table-wrap" style="max-height:260px">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:34px">#</th>
+            <th>句子</th>
+            <th class="num" style="width:56px">字数</th>
+            <th class="num" style="width:66px">切分</th>
+            <th class="num" style="width:74px">TTFA</th>
+            <th class="num" style="width:66px">合成</th>
+            <th class="num" style="width:66px">时长</th>
+            <th class="num" style="width:66px">字节</th>
+            <th style="width:56px">状态</th>
+          </tr>
+        </thead>
+        <tbody id="sentBody">
+          <tr class="empty-row"><td colspan="9">还没有句子</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== 历史 ==================== -->
+  <section class="glass-card card-pad hist-card">
+    <div class="sec-head">
+      <div class="sec-title"><i></i>历史对比</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="sec-note" id="histCount">0 条</span>
+        <button class="btn btn-sm" id="btnClearHist">清空</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:230px">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:64px">时间</th>
+            <th>LLM / TTS</th>
+            <th class="num" style="width:52px">字数</th>
+            <th class="num" style="width:52px">句数</th>
+            <th class="num" style="width:62px">LLM TTFT</th>
+            <th class="num" style="width:66px">首句切分</th>
+            <th class="num" style="width:78px">端到端首音</th>
+            <th class="num" style="width:62px">欠载</th>
+            <th class="num" style="width:62px">总耗时</th>
+            <th style="width:76px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="histBody">
+          <tr class="empty-row"><td colspan="10">跑一次就会出现在这里</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="error-box" id="errorBox"></div>
+<div class="toast" id="toast"></div>
+
+<script src="/shared.js"></script>
+<script src="/tts-voices.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ESC_MAP[c]; });
+  }
+
+  var LS_LLM = 'llm-pipeline-llm-v1';
+  var LS_TTS = 'llm-pipeline-tts-v1';
+  var LS_CFG = 'llm-pipeline-split-v1';
+  var LS_LAST = 'llm-pipeline-last-v1';
+  var LS_HIST = 'llm-pipeline-history-v1';
+  var MAX_PCM_RUNS = 5;
+  var MAX_PCM_BYTES = 20 * 1024 * 1024;
+  var HIST_LIMIT = 20;
+
+  var PRESETS = {
+    chat: '用三句话介绍一下你自己，口语一点。',
+    long: '请用大约三百字讲讲「为什么流式分句能让语音助手听起来更自然」，分成几个自然段，尽量多用短句。',
+    markdown: '用 Markdown 列出三条学习建议：**第一条**要具体，第二条给个例子，第三条用 `代码块` 演示。最后总结一句。'
+  };
+
+  var state = {
+    tab: 'llm',
+    llm: [],
+    tts: [],
+    activeLlm: '',
+    activeTts: '',
+    mode: 'idle',
+    controller: null,
+    player: null,
+    replayPlayer: null,
+    localT0: 0,
+    runId: '',
+    run: null,
+    sentMap: new Map(),
+    chunks: [],
+    chunkBytes: 0,
+    pcmCache: new Map(),
+    cacheOrder: [],
+    cacheBytes: 0,
+    history: [],
+    sampleRate: 24000,
+    pcmMode: false,
+    warnings: [],
+    errors: [],
+    elapsedTimer: 0
+  };
+
+  /* ==================== 基础工具 ==================== */
+
+  function safeGet(key, dflt) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) return dflt;
+      var v = JSON.parse(raw);
+      return v == null ? dflt : v;
+    } catch (e) { return dflt; }
+  }
+
+  function safeSet(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      toast('本地保存失败：隐私模式或空间已满', true);
+      return false;
+    }
+  }
+
+  function uid() {
+    return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function num(v, dflt) {
+    var n = Number(v);
+    return isFinite(n) ? n : dflt;
+  }
+
+  function fmtMs(ms) {
+    if (ms == null || !isFinite(ms)) return '—';
+    return ms < 1000 ? Math.round(ms) + '<small>ms</small>' : (ms / 1000).toFixed(2) + '<small>s</small>';
+  }
+
+  function fmtNum(ms) {
+    if (ms == null || !isFinite(ms)) return '—';
+    return ms < 1000 ? Math.round(ms) : (ms / 1000).toFixed(2) + 's';
+  }
+
+  function fmtBytes(n) {
+    if (n == null || !isFinite(n)) return '—';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  function fmtClock(ts) {
+    var d = new Date(ts);
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function toast(msg, isErr) {
+    var el = $('toast');
+    el.textContent = msg;
+    el.style.borderColor = isErr ? 'rgba(248,113,113,.5)' : 'rgba(255,255,255,.12)';
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(function () { el.classList.remove('show'); }, 2000);
+  }
+
+  function showError(msg) {
+    var box = $('errorBox');
+    box.innerHTML = '<b>出错了</b> · ' + esc(msg);
+    box.classList.add('show');
+  }
+
+  function hideError() { $('errorBox').classList.remove('show'); }
+
+  function setMetric(id, html, cls) {
+    var el = $(id);
+    if (!el) return;
+    el.innerHTML = html;
+    el.className = 'm-value' + (cls ? ' ' + cls : '');
+  }
+
+  function metricClass(ms, good, warn) {
+    if (ms == null) return '';
+    return ms <= good ? 'v-good' : (ms <= warn ? 'v-warn' : 'v-bad');
+  }
+
+  /* ==================== 资源池 ==================== */
+
+  function loadStore() {
+    state.llm = safeGet(LS_LLM, []);
+    if (!Array.isArray(state.llm)) state.llm = [];
+    state.tts = safeGet(LS_TTS, []);
+    if (!Array.isArray(state.tts)) state.tts = [];
+    state.history = safeGet(LS_HIST, []);
+    if (!Array.isArray(state.history)) state.history = [];
+  }
+
+  function persistLlm() { safeSet(LS_LLM, state.llm.slice(0, 30)); }
+  function persistTts() { safeSet(LS_TTS, state.tts.slice(0, 30)); }
+
+  function renderPool() {
+    renderList('llm');
+    renderList('tts');
+  }
+
+  function renderList(kind) {
+    var wrap = $(kind === 'llm' ? 'llmList' : 'ttsList');
+    var list = state[kind];
+    var activeId = kind === 'llm' ? state.activeLlm : state.activeTts;
+    if (!list.length) {
+      wrap.innerHTML = '<div class="pool-empty">' +
+        (kind === 'llm' ? '还没有 LLM 通道，点「＋ 新建」或「⇩ 导入渠道」' : '还没有 TTS 通道，点「＋ 新建」或「⇩ 导入配置」') +
+        '</div>';
+      return;
+    }
+    wrap.innerHTML = list.map(function (r) {
+      var active = r.id === activeId;
+      var meta = kind === 'llm'
+        ? (r.model || '') + (r.thinking && r.thinking.enabled ? ' · 思考' : '')
+        : ((r.kind === 'openai' ? 'OpenAI' : (r.family || '')) + ' · ' + (r.model || ''));
+      return '<div class="pool-item' + (active ? ' active' : '') + '" data-id="' + esc(r.id) + '">' +
+        '<div class="pool-main"><b>' + esc(r.name || r.model || '未命名') + '</b><span>' + esc(meta) + '</span></div>' +
+        '<button class="pool-del" data-del="' + esc(r.id) + '" title="删除">×</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  function collectThinking() {
+    return {
+      enabled: $('thinkEnabled').value === '1',
+      style: $('thinkStyle').value,
+      effort: $('thinkEffort').value,
+      budget: $('thinkBudget').value
+    };
+  }
+
+  function applyThinking(t) {
+    t = t || {};
+    $('thinkEnabled').value = t.enabled ? '1' : '0';
+    $('thinkStyle').value = t.style || 'auto';
+    $('thinkEffort').value = t.effort || 'medium';
+    $('thinkBudget').value = t.budget == null ? '' : t.budget;
+    updateThinkPreview();
+  }
+
+  function updateThinkPreview() {
+    var lib = window.LLMCommon;
+    var url = $('llmUrl').value.trim();
+    var model = $('llmModel').value.trim();
+    if (!lib) return;
+    var provider = lib.detectThinkingProvider(url, model);
+    $('thinkDetected').textContent = provider;
+    var params = lib.buildThinkingParams(collectThinking(), url, model);
+    $('thinkPreview').textContent = Object.keys(params).length
+      ? JSON.stringify(params, null, 2)
+      : '（不下发任何思考参数）';
+  }
+
+  function collectLlm() {
+    return {
+      id: state.activeLlm || '',
+      name: $('llmName').value.trim() || $('llmModel').value.trim() || '未命名 LLM',
+      url: $('llmUrl').value.trim(),
+      apiKey: $('llmKey').value.trim(),
+      model: $('llmModel').value.trim(),
+      maxTokens: num($('llmMaxTokens').value, 256),
+      temperature: num($('llmTemp').value, 0.7),
+      system: $('llmSystem').value,
+      thinking: collectThinking()
+    };
+  }
+
+  function applyLlm(rec) {
+    rec = rec || {};
+    $('llmName').value = rec.name || '';
+    $('llmUrl').value = rec.url || '';
+    $('llmKey').value = rec.apiKey || '';
+    $('llmModel').value = rec.model || '';
+    $('llmMaxTokens').value = rec.maxTokens || 256;
+    $('llmTemp').value = rec.temperature == null ? 0.7 : rec.temperature;
+    $('llmSystem').value = rec.system || '';
+    applyThinking(rec.thinking);
+    state.activeLlm = rec.id || '';
+    renderPool();
+    saveLast();
+  }
+
+  function detectFamily(model) {
+    var m = String(model || '').toLowerCase();
+    if (/^cosyvoice/.test(m)) return 'cosyvoice';
+    if (/^qwen3?-tts/.test(m)) return 'qwen-tts';
+    if (/^qwen-audio/.test(m)) return 'qwen-audio-tts';
+    return 'qwen-audio-tts';
+  }
+
+  function collectTts() {
+    return {
+      id: state.activeTts || '',
+      name: $('ttsName').value.trim() || $('ttsModel').value.trim() || '未命名 TTS',
+      kind: $('ttsKind').value,
+      url: $('ttsUrl').value.trim(),
+      apiKey: $('ttsKey').value.trim(),
+      family: $('ttsFamily').value,
+      model: $('ttsModel').value.trim(),
+      voice: $('ttsVoice').value.trim(),
+      format: $('ttsFormat').value,
+      sampleRate: num($('ttsSampleRate').value, 24000),
+      rate: num($('ttsRate').value, 1),
+      pitch: num($('ttsPitch').value, 1),
+      volume: num($('ttsVolume').value, 50),
+      instruction: $('ttsInstruction').value.trim(),
+      paramPlacement: $('ttsPlacement').value,
+      languageType: ''
+    };
+  }
+
+  function applyTts(rec) {
+    rec = rec || {};
+    $('ttsName').value = rec.name || '';
+    $('ttsKind').value = rec.kind === 'openai' ? 'openai' : 'aliyun';
+    $('ttsUrl').value = rec.url || '';
+    $('ttsKey').value = rec.apiKey || '';
+    $('ttsFamily').value = rec.family || detectFamily(rec.model);
+    $('ttsModel').value = rec.model || '';
+    $('ttsVoice').value = rec.voice || '';
+    $('ttsFormat').value = rec.format || 'pcm';
+    $('ttsSampleRate').value = String(rec.sampleRate || 24000);
+    $('ttsRate').value = rec.rate == null ? 1 : rec.rate;
+    $('ttsPitch').value = rec.pitch == null ? 1 : rec.pitch;
+    $('ttsVolume').value = rec.volume == null ? 50 : rec.volume;
+    $('ttsInstruction').value = rec.instruction || '';
+    $('ttsPlacement').value = rec.paramPlacement || 'input';
+    state.activeTts = rec.id || '';
+    syncTtsKind();
+    refreshVoices();
+    renderPool();
+    saveLast();
+  }
+
+  function syncTtsKind() {
+    var openai = $('ttsKind').value === 'openai';
+    $('ttsFamily').disabled = openai;
+    $('ttsPlacement').disabled = openai;
+    $('ttsFormat').querySelectorAll('option').forEach(function (o) {
+      if (o.value === 'opus') o.disabled = openai;
+    });
+    if (openai && ['opus'].indexOf($('ttsFormat').value) >= 0) $('ttsFormat').value = 'pcm';
+  }
+
+  function refreshVoices() {
+    var model = $('ttsModel').value.trim();
+    var lib = (window.TTS_VOICE_LIBRARY || {})[model] || [];
+    var total = 0;
+    var html = [];
+    lib.forEach(function (g) {
+      g.voices.forEach(function (v) {
+        total++;
+        html.push('<option value="' + esc(v.id) + '">' + esc(v.name + (v.note ? ' · ' + v.note : '')) + '</option>');
+      });
+    });
+    $('voiceOptions').innerHTML = html.join('');
+    $('voiceHint').textContent = total ? ('内置 ' + total + ' 个') : '（可手输）';
+  }
+
+  function newLlm() {
+    state.activeLlm = '';
+    applyLlm({ maxTokens: 256, temperature: 0.7, thinking: { enabled: false, style: 'auto', effort: 'medium' } });
+  }
+
+  function newTts() {
+    state.activeTts = '';
+    applyTts({ kind: 'aliyun', family: 'qwen-audio-tts', format: 'pcm', sampleRate: 24000, rate: 1, pitch: 1, volume: 50, paramPlacement: 'input' });
+  }
+
+  function saveLlm() {
+    var rec = collectLlm();
+    if (!rec.url || !rec.model) return toast('先填 API 地址和模型', true);
+    var idx = -1;
+    for (var i = 0; i < state.llm.length; i++) { if (state.llm[i].id === state.activeLlm) { idx = i; break; } }
+    if (idx >= 0) {
+      rec.createdAt = state.llm[idx].createdAt || Date.now();
+      rec.updatedAt = Date.now();
+      state.llm[idx] = rec;
+      state.activeLlm = rec.id;
+    } else {
+      rec.id = uid();
+      rec.createdAt = Date.now();
+      state.llm.unshift(rec);
+      state.activeLlm = rec.id;
+    }
+    persistLlm();
+    renderPool();
+    saveLast();
+    toast('已保存 LLM 通道');
+  }
+
+  function saveTts() {
+    var rec = collectTts();
+    if (!rec.url || !rec.model || !rec.voice) return toast('先填地址、模型和音色', true);
+    var idx = -1;
+    for (var i = 0; i < state.tts.length; i++) { if (state.tts[i].id === state.activeTts) { idx = i; break; } }
+    if (idx >= 0) {
+      rec.createdAt = state.tts[idx].createdAt || Date.now();
+      rec.updatedAt = Date.now();
+      state.tts[idx] = rec;
+      state.activeTts = rec.id;
+    } else {
+      rec.id = uid();
+      rec.createdAt = Date.now();
+      state.tts.unshift(rec);
+      state.activeTts = rec.id;
+    }
+    persistTts();
+    renderPool();
+    saveLast();
+    toast('已保存 TTS 通道');
+  }
+
+  function importLlm() {
+    var list = safeGet('llm-channels-v1', []);
+    if (!Array.isArray(list) || !list.length) return toast('测速/聊天页还没有保存过渠道', true);
+    var added = 0, skipped = 0;
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (!c || !c.url || !c.model) continue;
+      var dup = state.llm.some(function (x) { return x.url === c.url && x.model === c.model; });
+      if (dup) { skipped++; continue; }
+      state.llm.unshift({
+        id: uid(),
+        name: c.name || c.model,
+        url: c.url,
+        apiKey: c.apiKey || '',
+        model: c.model,
+        maxTokens: num(c.maxTokens, 256),
+        temperature: num(c.temperature, 0.7),
+        system: (c.extras && c.extras.chat) || '',
+        thinking: c.thinking || { enabled: false, style: 'auto', effort: 'medium', budget: '' },
+        createdAt: Date.now()
+      });
+      added++;
+    }
+    persistLlm();
+    renderPool();
+    toast('导入 ' + added + ' 个 LLM 通道' + (skipped ? '，跳过 ' + skipped + ' 个重复' : ''));
+  }
+
+  function importTts() {
+    var c = safeGet('llm-tts-config-v1', null);
+    if (!c || !c.modelId) return toast('语音合成页还没有保存过配置', true);
+    state.tts.unshift({
+      id: uid(),
+      name: c.modelId + (c.voice ? ' · ' + c.voice : ''),
+      kind: 'aliyun',
+      url: c.apiUrl || 'https://dashscope.aliyuncs.com',
+      apiKey: c.apiKey || '',
+      family: detectFamily(c.modelId),
+      model: c.modelId,
+      voice: c.voice || '',
+      format: 'pcm', // 联调台默认走 PCM 流式，才能测真实首音（合成页的原设置多为 mp3）
+      sampleRate: num(c.sampleRate, 24000),
+      rate: num(c.rate, 1),
+      pitch: num(c.pitch, 1),
+      volume: num(c.volume, 50),
+      instruction: c.instruction || '',
+      paramPlacement: c.placement === 'parameters' ? 'parameters' : 'input',
+      languageType: c.languageType || '',
+      createdAt: Date.now()
+    });
+    persistTts();
+    renderPool();
+    toast('已导入语音合成页的配置');
+  }
+
+  function saveLast() {
+    safeSet(LS_LAST, {
+      llmId: state.activeLlm,
+      ttsId: state.activeTts,
+      prompt: $('prompt').value
+    });
+  }
+
+  function restoreLast() {
+    var last = safeGet(LS_LAST, null) || {};
+    // 先把 prompt 放回去，再 apply*（apply 内部会 saveLast，晚放会把旧文本覆盖掉）
+    if (last.prompt) $('prompt').value = last.prompt;
+    var llmRec = null, ttsRec = null;
+    for (var i = 0; i < state.llm.length; i++) { if (state.llm[i].id === last.llmId) llmRec = state.llm[i]; }
+    for (var j = 0; j < state.tts.length; j++) { if (state.tts[j].id === last.ttsId) ttsRec = state.tts[j]; }
+    if (!llmRec && state.llm.length) llmRec = state.llm[0];
+    if (!ttsRec && state.tts.length) ttsRec = state.tts[0];
+    applyLlm(llmRec || { maxTokens: 256, temperature: 0.7, thinking: { enabled: false, style: 'auto', effort: 'medium' } });
+    applyTts(ttsRec || { kind: 'aliyun', family: 'qwen-audio-tts', format: 'pcm', sampleRate: 24000, rate: 1, pitch: 1, volume: 50, paramPlacement: 'input' });
+    saveLast();
+  }
+
+  /* ==================== 配置（分句 / 播放） ==================== */
+
+  function collectSplit() {
+    return {
+      firstMin: num($('splitFirstMin').value, 4),
+      firstMax: num($('splitFirstMax').value, 14),
+      minLen: num($('splitMin').value, 8),
+      maxLen: num($('splitMax').value, 40),
+      soft: $('splitSoft').checked,
+      softMin: num($('splitSoftMin').value, 10),
+      idleMs: num($('splitIdleMs').value, 400),
+      stripMarkdown: $('splitStripMd').checked,
+      keepTags: $('splitKeepTags').checked
+    };
+  }
+
+  function saveCfg() {
+    safeSet(LS_CFG, {
+      split: collectSplit(),
+      concurrency: (document.querySelector('input[name="conc"]:checked') || {}).value || '1',
+      leadMs: $('leadMs').value
+    });
+  }
+
+  function restoreCfg() {
+    var c = safeGet(LS_CFG, null);
+    if (!c) return;
+    var s = c.split || {};
+    if (s.firstMin != null) $('splitFirstMin').value = s.firstMin;
+    if (s.firstMax != null) $('splitFirstMax').value = s.firstMax;
+    if (s.minLen != null) $('splitMin').value = s.minLen;
+    if (s.maxLen != null) $('splitMax').value = s.maxLen;
+    if (s.soft != null) $('splitSoft').checked = !!s.soft;
+    if (s.softMin != null) $('splitSoftMin').value = s.softMin;
+    if (s.idleMs != null) $('splitIdleMs').value = s.idleMs;
+    if (s.stripMarkdown != null) $('splitStripMd').checked = !!s.stripMarkdown;
+    if (s.keepTags != null) $('splitKeepTags').checked = !!s.keepTags;
+    if (c.concurrency) {
+      var radio = document.querySelector('input[name="conc"][value="' + c.concurrency + '"]');
+      if (radio) radio.checked = true;
+    }
+    if (c.leadMs) $('leadMs').value = c.leadMs;
+  }
+
+  /* ==================== PCM 播放器 ==================== */
+
+  function PcmPlayer(leadMs) {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    this.ac = new AC();
+    this.gain = this.ac.createGain();
+    this.gain.connect(this.ac.destination);
+    this.sr = 24000;
+    this.lead = (leadMs || 120) / 1000;
+    this.nextTime = 0;
+    this.sources = new Set();
+    this.underruns = 0;
+    this.minDepthMs = Infinity;
+    this.firstAudibleAt = null;
+    this.decodeChain = Promise.resolve();
+    this.scheduledMs = 0;
+  }
+
+  PcmPlayer.prototype.resume = function () {
+    var self = this;
+    if (this.ac.state === 'suspended') {
+      return this.ac.resume().catch(function () { /* 手势外无法恢复 */ });
+    }
+    return Promise.resolve();
+  };
+
+  PcmPlayer.prototype.setRate = function (sr) {
+    if (sr && isFinite(sr)) this.sr = sr;
+  };
+
+  PcmPlayer.prototype.push = function (bytes) {
+    if (!bytes || !bytes.length) return;
+    var n = Math.floor(bytes.length / 2);
+    if (!n) return;
+    var f32 = new Float32Array(n);
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (var i = 0; i < n; i++) {
+      f32[i] = view.getInt16(i * 2, true) / 32768;
+    }
+    var buf;
+    try {
+      buf = this.ac.createBuffer(1, n, this.sr);
+    } catch (e) {
+      return; // 采样率非法时直接丢弃，避免整页崩掉
+    }
+    buf.copyToChannel(f32, 0);
+    this._schedule(buf);
+  };
+
+  PcmPlayer.prototype.pushEncoded = function (bytes) {
+    var self = this;
+    this.decodeChain = this.decodeChain.then(function () {
+      return self.ac.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+        .then(function (buf) { self._schedule(buf); })
+        .catch(function () { /* mp3 分片不完整时忽略 */ });
+    });
+    return this.decodeChain;
+  };
+
+  PcmPlayer.prototype._schedule = function (buf) {
+    var now = this.ac.currentTime;
+    var startAt = this.nextTime;
+    if (!startAt || startAt < now + 0.005) {
+      if (this.nextTime > 0) this.underruns++;  // 已经起播过又追不上 => 欠载
+      startAt = now + this.lead;
+    }
+    if (this.firstAudibleAt === null) {
+      this.firstAudibleAt = performance.now() + (startAt - now) * 1000;
+    }
+    var src = this.ac.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.gain);
+    src.start(startAt);
+    this.nextTime = startAt + buf.duration;
+    this.scheduledMs += buf.duration * 1000;
+    var depth = (this.nextTime - this.ac.currentTime) * 1000;
+    if (depth < this.minDepthMs) this.minDepthMs = depth;
+    var self = this;
+    this.sources.add(src);
+    src.onended = function () {
+      self.sources.delete(src);
+      try { src.disconnect(); } catch (e) { /* 已断开 */ }
+    };
+  };
+
+  PcmPlayer.prototype.stopAll = function () {
+    this.sources.forEach(function (s) {
+      try { s.stop(); } catch (e) { /* 未开始播放 */ }
+    });
+    this.sources.clear();
+    this.nextTime = 0;
+  };
+
+  PcmPlayer.prototype.close = function () {
+    this.stopAll();
+    var ac = this.ac;
+    setTimeout(function () { try { ac.close(); } catch (e) { /* 已关闭 */ } }, 80);
+  };
+
+  PcmPlayer.prototype.depthMs = function () {
+    return this.nextTime ? Math.max(0, (this.nextTime - this.ac.currentTime) * 1000) : 0;
+  };
+
+  /* ==================== 运行 ==================== */
+
+  function validate(payload) {
+    if (!payload.llm.dryRun) {
+      if (!payload.llm.url) throw new Error('缺少 LLM API 地址');
+      if (!payload.llm.apiKey) throw new Error('缺少 LLM API Key');
+      if (!payload.llm.model) throw new Error('缺少 LLM 模型名');
+      if (!payload.llm.prompt && !payload.llm.system) throw new Error('先写一句要问的话');
+    }
+    if (!payload.skipTts) {
+      if (!payload.tts.url) throw new Error('缺少 TTS API 地址');
+      if (!payload.tts.apiKey) throw new Error('缺少 TTS API Key');
+      if (!payload.tts.model) throw new Error('缺少 TTS 模型');
+      if (!payload.tts.voice) throw new Error('缺少 TTS 音色');
+    }
+    if (!payload.llm.dryRun && !payload.llm.prompt) throw new Error('先写一句要问的话');
+  }
+
+  function buildPayload() {
+    var llm = collectLlm();
+    var tts = collectTts();
+    var conc = document.querySelector('input[name="conc"]:checked');
+    return {
+      llm: {
+        url: llm.url,
+        apiKey: llm.apiKey,
+        model: llm.model,
+        system: llm.system,
+        prompt: $('prompt').value.trim(),
+        maxTokens: llm.maxTokens,
+        temperature: llm.temperature,
+        thinking: llm.thinking,
+        idleTimeoutSec: 20,
+        timeoutSec: 120,
+        dryRun: $('dryRun').checked
+      },
+      tts: {
+        kind: tts.kind,
+        url: tts.url,
+        apiKey: tts.apiKey,
+        family: tts.family,
+        model: tts.model,
+        voice: tts.voice,
+        format: tts.format,
+        sampleRate: tts.sampleRate,
+        rate: tts.rate,
+        pitch: tts.pitch,
+        volume: tts.volume,
+        instruction: tts.instruction,
+        paramPlacement: tts.paramPlacement,
+        timeoutSec: 30
+      },
+      split: collectSplit(),
+      concurrency: Number(conc ? conc.value : 1) || 1,
+      skipTts: $('skipTts').checked,
+      maxTotalSec: 180
+    };
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    $('btnRun').disabled = mode !== 'idle';
+    $('btnStop').disabled = mode === 'idle';
+    var dot = $('statusDot');
+    dot.className = 'status-dot' + (mode === 'running' ? ' running' : (mode === 'stopping' ? ' stopping' : ''));
+    if (mode === 'idle') {
+      clearInterval(state.elapsedTimer);
+    }
+    $('poolTabs').querySelectorAll('button').forEach(function (b) { b.disabled = mode !== 'idle'; });
+  }
+
+  function setStatus(text) { $('statusText').textContent = text; }
+
+  function startElapsed() {
+    clearInterval(state.elapsedTimer);
+    state.elapsedTimer = setInterval(function () {
+      if (state.mode === 'idle') return;
+      var ms = performance.now() - state.localT0;
+      $('runElapsed').textContent = (ms / 1000).toFixed(1) + 's';
+    }, 100);
+  }
+
+  function resetRunUI() {
+    state.run = null;
+    state.sentMap = new Map();
+    state.chunks = [];
+    state.chunkBytes = 0;
+    state.warnings = [];
+    state.errors = [];
+    state.runId = '';
+    state.pcmMode = false;
+    $('llmOut').textContent = '';
+    $('llmOut').classList.remove('streaming');
+    $('reasonOut').textContent = '';
+    $('reasonFold').style.display = 'none';
+    $('llmStat').textContent = '—';
+    $('sentStat').textContent = '—';
+    $('runTag').textContent = '—';
+    $('runElapsed').textContent = '0.0s';
+    $('llmBodyPreview').textContent = '—';
+    $('ttsBodyPreview').textContent = '—';
+    $('warnList').innerHTML = '';
+    $('sentBody').innerHTML = '<tr class="empty-row"><td colspan="9">等待第一句…</td></tr>';
+    ['m-llm-ttft', 'm-first-sent', 'm-server-ttfa', 'm-e2e', 'm-first-gap', 'm-tts-ttfa', 'm-audio', 'm-rtf', 'm-underrun', 'm-total', 'm-tokens', 'm-sent-count'].forEach(function (id) {
+      setMetric(id, '—', '');
+    });
+    drawTimeline();
+    hideError();
+  }
+
+  function startRun() {
+    if (state.mode !== 'idle') return;
+    hideError();
+
+    var payload;
+    try {
+      payload = buildPayload();
+      validate(payload);
+    } catch (e) {
+      if (/TTS/.test(e.message)) switchTab('tts');
+      else if (/LLM|prompt|问的话/.test(e.message)) switchTab('llm');
+      showError(e.message);
+      return;
+    }
+
+    // AudioContext 必须在用户手势内创建，否则会被自动播放策略挂起
+    try {
+      if (state.player) { state.player.close(); state.player = null; }
+      state.player = new PcmPlayer(num($('leadMs').value, 120));
+      state.player.resume();
+    } catch (e) {
+      state.player = null;
+      showError('浏览器不支持 Web Audio，音频将不会播放：' + e.message);
+    }
+
+    resetRunUI();
+    state.mode = 'running';
+    setMode('running');
+    setStatus('已发起请求…');
+    state.localT0 = performance.now();
+    state.run = {
+      llm: null,
+      sentences: [],
+      firstSentenceMs: null,
+      serverTtfaMs: null,
+      e2eTtfa: null,
+      totalMs: null,
+      underruns: 0,
+      audioBytes: 0
+    };
+    state.controller = new AbortController();
+    startElapsed();
+
+    fetch('/api/pipeline/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: state.controller.signal
+    }).then(function (res) {
+      var ct = res.headers.get('content-type') || '';
+      if (!res.ok) {
+        return res.text().then(function (text) {
+          var msg = text;
+          try { msg = JSON.parse(text).error || text; } catch (e) { /* 非 JSON */ }
+          throw new Error('HTTP ' + res.status + '：' + msg);
+        });
+      }
+      if (ct.indexOf('text/event-stream') < 0) {
+        return res.text().then(function (text) {
+          throw new Error('服务端没有返回 SSE（可能还是旧版服务端，请重启 npm start）：' + text.slice(0, 160));
+        });
+      }
+      return consume(res);
+    }).catch(function (err) {
+      if (err && err.name === 'AbortError') {
+        setStatus('已停止');
+        return;
+      }
+      showError(err && err.message ? err.message : String(err));
+      setStatus('出错');
+    }).then(function () {
+      finishRun();
+    });
+  }
+
+  function consume(res) {
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '';
+
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.done) return;
+        buffer += decoder.decode(r.value, { stream: true });
+        var lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line || line.charAt(0) === ':' || line.indexOf('data:') !== 0) continue;
+          var data = line.slice(5).trim();
+          if (!data || data === '[DONE]') continue;
+          var ev;
+          try { ev = JSON.parse(data); } catch (e) { continue; }
+          handleEvent(ev);
+        }
+        return pump();
+      });
+    }
+    return pump();
+  }
+
+  function handleEvent(ev) {
+    switch (ev.type) {
+      case 'start': onStart(ev); break;
+      case 'llm_delta': appendLlm(ev.text); break;
+      case 'llm_reasoning': appendReason(ev.text); break;
+      case 'sentence': onSentence(ev); break;
+      case 'tts_start': onTtsStart(ev); break;
+      case 'audio': onAudio(ev); break;
+      case 'tts_done': onTtsDone(ev); break;
+      case 'warn': pushWarn(ev.message, false); break;
+      case 'error': pushWarn(ev.message, true); break;
+      case 'llm_done':
+        state.run.llm = ev;
+        state.run.llmChars = ev.chars || 0;
+        renderLlmStat(ev);
+        break;
+      case 'done': onDone(ev); break;
+      default: break;
+    }
+  }
+
+  function onStart(ev) {
+    state.runId = ev.runId;
+    state.sampleRate = ev.effectiveSampleRate || ev.sampleRate || 24000;
+    state.pcmMode = ev.effectiveSampleRate != null;
+    if (state.player) state.player.setRate(state.sampleRate);
+
+    $('runTag').textContent = '#' + ev.runId + ' · ' + (ev.effectiveSampleRate ? (ev.effectiveSampleRate + 'Hz PCM') : (ev.format + ' 整句解码'));
+    $('llmBodyPreview').textContent = JSON.stringify(ev.body && ev.body.llm, null, 2);
+    $('ttsBodyPreview').textContent = JSON.stringify(ev.body && ev.body.tts, null, 2);
+
+    (ev.warnings || []).forEach(function (w) { pushWarn(w, false); });
+    if (!state.pcmMode && !$('skipTts').checked) pushWarn('当前配置走整句解码播放，首音延迟会偏高；想测真实首音请用 pcm 格式', false);
+
+    setStatus(ev.endpoint ? ('已连接 · ' + shorten(ev.endpoint.tts)) : '运行中');
+  }
+
+  function shorten(url) {
+    var s = String(url || '');
+    return s.replace(/^https?:\/\//, '').slice(0, 46);
+  }
+
+  function appendLlm(text) {
+    var el = $('llmOut');
+    el.classList.add('streaming');
+    el.textContent += text;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function appendReason(text) {
+    $('reasonFold').style.display = '';
+    var el = $('reasonOut');
+    el.textContent += text;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function renderLlmStat(ev) {
+    var parts = [];
+    if (ev.ttft != null) parts.push('TTFT ' + Math.round(ev.ttft) + 'ms');
+    if (ev.outputTokens) parts.push(ev.outputTokens + ' tokens');
+    if (ev.chars) parts.push(ev.chars + ' 字');
+    $('llmStat').textContent = parts.length ? parts.join(' · ') : '—';
+  }
+
+  function pushWarn(msg, isErr) {
+    if (!msg) return;
+    var list = $('warnList');
+    var div = document.createElement('div');
+    div.className = 'warn-item' + (isErr ? ' err' : '');
+    div.textContent = msg;
+    list.appendChild(div);
+    while (list.children.length > 6) list.removeChild(list.firstChild);
+    if (isErr) state.errors.push(msg);
+  }
+
+  function onSentence(ev) {
+    if (state.run.firstSentenceMs == null) {
+      state.run.firstSentenceMs = ev.atMs;
+      setMetric('m-first-sent', fmtMs(ev.atMs), metricClass(ev.atMs, 800, 1500));
+    }
+    state.sentMap.set(ev.seq, {
+      seq: ev.seq,
+      text: ev.text,
+      chars: ev.chars,
+      reason: ev.reason,
+      splitMs: ev.atMs,
+      ttsStartMs: null,
+      ttfaMs: null,
+      synthMs: null,
+      bytes: 0,
+      audioMs: null,
+      ok: null,
+      error: null
+    });
+    renderSentences();
+    drawTimeline();
+    setStatus('合成第 ' + (ev.seq + 1) + ' 句 · ' + ev.chars + ' 字');
+  }
+
+  function onTtsStart(ev) {
+    var it = state.sentMap.get(ev.seq);
+    if (it) { it.ttsStartMs = ev.atMs; renderSentences(); }
+  }
+
+  function onAudio(ev) {
+    if (state.run.serverTtfaMs == null) {
+      state.run.serverTtfaMs = ev.atMs;
+      setMetric('m-server-ttfa', fmtMs(ev.atMs), 'v-good');
+    }
+    var bytes = b64ToBytes(ev.data);
+    if (!bytes.length) return;
+    state.chunks.push(bytes);
+    state.chunkBytes += bytes.length;
+    state.run.audioBytes += bytes.length;
+
+    var it = state.sentMap.get(ev.seq);
+    if (it) {
+      it.bytes += bytes.length;
+      if (it.audioMs == null && ev.durMs != null) it.audioMs = 0;
+      if (ev.durMs != null) it.audioMs += ev.durMs;
+    }
+
+    if (state.player) {
+      if (state.pcmMode) state.player.push(bytes);
+      else state.player.pushEncoded(bytes);
+    }
+  }
+
+  function onTtsDone(ev) {
+    var it = state.sentMap.get(ev.seq);
+    if (it) {
+      it.ttfaMs = ev.ttfaMs == null ? null : ev.ttfaMs;
+      it.synthMs = ev.synthMs == null ? null : ev.synthMs;
+      it.ok = ev.ok !== false;
+      it.error = ev.error || null;
+      if (ev.bytes != null && !it.bytes) it.bytes = ev.bytes;
+      renderSentences();
+      drawTimeline();
+    }
+    if (state.player) {
+      state.run.underruns = state.player.underruns;
+      setMetric('m-underrun', String(state.player.underruns), state.player.underruns === 0 ? 'v-good' : (state.player.underruns <= 2 ? 'v-warn' : 'v-bad'));
+    }
+  }
+
+  function onDone(ev) {
+    var m = ev.metrics || {};
+    state.run.totalMs = m.totalMs != null ? m.totalMs : ev.atMs;
+    state.run.firstSentenceMs = m.firstSentenceMs;
+    state.run.serverTtfaMs = m.serverTtfaMs;
+
+    // 用服务端的句子明细补全（流式阶段可能漏掉某些统计）
+    (m.sentences || []).forEach(function (s) {
+      var it = state.sentMap.get(s.seq);
+      if (!it) {
+        state.sentMap.set(s.seq, {
+          seq: s.seq, text: s.text, chars: s.chars, reason: s.reason,
+          splitMs: s.splitMs, ttsStartMs: s.ttsStartMs, ttfaMs: s.ttfaMs, synthMs: s.synthMs,
+          bytes: s.bytes, audioMs: s.audioMs, ok: s.ok, error: s.error
+        });
+      } else {
+        if (s.ttfaMs != null) it.ttfaMs = s.ttfaMs;
+        if (s.synthMs != null) it.synthMs = s.synthMs;
+        if (s.audioMs != null) it.audioMs = s.audioMs;
+        if (s.bytes) it.bytes = s.bytes;
+        it.ok = s.ok;
+        it.error = s.error;
+      }
+    });
+    renderSentences();
+
+    var underruns = state.player ? state.player.underruns : 0;
+    var e2e = (state.player && state.player.firstAudibleAt != null)
+      ? Math.round(state.player.firstAudibleAt - state.localT0)
+      : null;
+    state.run.e2eTtfa = e2e;
+    state.run.underruns = underruns;
+
+    setMetric('m-llm-ttft', fmtMs(m.llmTtftMs), metricClass(m.llmTtftMs, 500, 1500));
+    setMetric('m-first-sent', fmtMs(m.firstSentenceMs), metricClass(m.firstSentenceMs, 800, 1500));
+    setMetric('m-server-ttfa', fmtMs(m.serverTtfaMs), 'v-good');
+    setMetric('m-e2e', fmtMs(e2e), metricClass(e2e, 1000, 2000));
+    setMetric('m-first-gap', fmtMs(m.firstAudioGapMs), '');
+    setMetric('m-tts-ttfa', fmtMs(m.ttsTtfaAvgMs), '');
+    setMetric('m-audio', m.audioMs == null ? '—' : fmtMs(m.audioMs), '');
+    setMetric('m-rtf', m.rtf == null ? '—' : String(m.rtf), m.rtf == null ? '' : (m.rtf >= 1 ? 'v-good' : (m.rtf >= 0.8 ? 'v-warn' : 'v-bad')));
+    setMetric('m-underrun', String(underruns), underruns === 0 ? 'v-good' : (underruns <= 2 ? 'v-warn' : 'v-bad'));
+    setMetric('m-total', fmtMs(m.totalMs), '');
+    setMetric('m-sent-count', String(m.sentenceCount == null ? state.sentMap.size : m.sentenceCount), '');
+    var tk = m.tokens || {};
+    setMetric('m-tokens', tk.output ? (tk.output + (tk.estimated ? '<small>~</small>' : '')) : '—', '');
+
+    $('llmStat').textContent = (m.tokens && m.tokens.output ? m.tokens.output + ' tokens' : '') +
+      (m.rtf != null ? ' · RTF ' + m.rtf : '');
+    $('sentStat').textContent = (m.sentenceCount || 0) + ' 句 · ' + fmtBytes(m.audioBytes || 0);
+    setStatus(ev.partial ? '完成（部分失败）' : '完成');
+    drawTimeline();
+
+    // 非 PCM（wav/mp3）服务端算不出时长，等 decode 完成后用播放器排播的时长兜底
+    var p = state.player;
+    if (m.audioMs == null && p) {
+      p.decodeChain.then(function () {
+        var dur = Math.round(p.scheduledMs);
+        if (dur > 0) {
+          setMetric('m-audio', fmtMs(dur), '');
+          if (m.totalMs) {
+            var rtf = Math.round((dur / m.totalMs) * 100) / 100;
+            setMetric('m-rtf', String(rtf), rtf >= 1 ? 'v-good' : (rtf >= 0.8 ? 'v-warn' : 'v-bad'));
+          }
+        }
+      });
+    }
+
+    cacheRunAudio();
+    pushHistory(m, e2e, underruns);
+  }
+
+  function b64ToBytes(b64) {
+    var bin = atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function finishRun() {
+    if (state.mode === 'idle') return;
+    var player = state.player;
+    if (player) {
+      // 让已排队的音频播完再关，避免最后一句被截断
+      var wait = Math.max(0, player.depthMs());
+      setTimeout(function () { if (state.player === player) { player.close(); state.player = null; } }, Math.min(60000, wait + 220));
+    }
+    $('llmOut').classList.remove('streaming');
+    setMode('idle');
+    $('runElapsed').textContent = (performance.now() - state.localT0 >= 0 && state.run && state.run.totalMs != null)
+      ? (state.run.totalMs / 1000).toFixed(2) + 's'
+      : $('runElapsed').textContent;
+    if (state.mode === 'idle' && !$('statusText').textContent) setStatus('待运行');
+    state.controller = null;
+  }
+
+  function stopRun() {
+    if (state.mode !== 'running') return;
+    setMode('stopping');
+    setStatus('正在停止…');
+    if (state.controller) state.controller.abort();
+    if (state.player) { state.player.stopAll(); }
+    setTimeout(function () {
+      setMode('idle');
+      setStatus('已停止');
+      if (state.player) { state.player.close(); state.player = null; }
+    }, 120);
+  }
+
+  /* ==================== 句子表 / 时间轴 ==================== */
+
+  function renderSentences() {
+    var list = Array.from(state.sentMap.values()).sort(function (a, b) { return a.seq - b.seq; });
+    var body = $('sentBody');
+    if (!list.length) {
+      body.innerHTML = '<tr class="empty-row"><td colspan="9">等待第一句…</td></tr>';
+      return;
+    }
+    body.innerHTML = list.map(function (it) {
+      var cls = it.ok === true ? 'chip-ok' : (it.ok === false ? 'chip-err' : (it.ttsStartMs != null ? 'chip-run' : 'chip-wait'));
+      var label = it.ok === true ? 'ok' : (it.ok === false ? 'err' : (it.ttsStartMs != null ? '合成' : '排队'));
+      return '<tr>' +
+        '<td class="num">' + (it.seq + 1) + '</td>' +
+        '<td class="sent" title="' + esc(it.text) + '">' + esc(it.text) + '</td>' +
+        '<td class="num">' + it.chars + '</td>' +
+        '<td class="num">' + (it.splitMs == null ? '—' : Math.round(it.splitMs)) + '</td>' +
+        '<td class="num">' + (it.ttfaMs == null ? '—' : Math.round(it.ttfaMs)) + '</td>' +
+        '<td class="num">' + (it.synthMs == null ? '—' : Math.round(it.synthMs)) + '</td>' +
+        '<td class="num">' + (it.audioMs == null ? '—' : Math.round(it.audioMs)) + '</td>' +
+        '<td class="num">' + (it.bytes ? Math.round(it.bytes / 1024) + 'k' : '—') + '</td>' +
+        '<td><span class="chip ' + cls + '" title="' + esc(it.error || '') + '">' + label + '</span></td>' +
+        '</tr>';
+    }).join('');
+    $('sentStat').textContent = list.length + ' 句';
+  }
+
+  function niceStep(total) {
+    var steps = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 30000];
+    for (var i = 0; i < steps.length; i++) {
+      if (total / steps[i] <= 8) return steps[i];
+    }
+    return 60000;
+  }
+
+  function drawTimeline() {
+    var cv = $('timelineCanvas');
+    if (!cv) return;
+    var cssW = cv.clientWidth || 600;
+    var items = state.run ? Array.from(state.sentMap.values()).sort(function (a, b) { return a.seq - b.seq; }) : [];
+    var total = Math.max(1000, (state.run && state.run.totalMs) || (state.run && state.run.serverTtfaMs) || 1000);
+    var rows = items.length + 1;
+    var cssH = 22 + rows * 23;
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssH * dpr);
+    cv.style.height = cssH + 'px';
+
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    var padL = 30, padR = 8, padT = 8;
+    var w = Math.max(50, cssW - padL - padR);
+    function x(ms) { return padL + Math.min(1, Math.max(0, ms / total)) * w; }
+
+    // 网格
+    var step = niceStep(total);
+    ctx.font = '9px Consolas, monospace';
+    ctx.textBaseline = 'middle';
+    for (var t = 0; t <= total; t += step) {
+      var px = x(t);
+      ctx.strokeStyle = 'rgba(255,255,255,.055)';
+      ctx.beginPath();
+      ctx.moveTo(px, padT);
+      ctx.lineTo(px, cssH - 4);
+      ctx.stroke();
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(t >= 1000 ? (t / 1000).toFixed(t % 1000 ? 1 : 0) + 's' : t + 'ms', px + 2, cssH - 6);
+    }
+
+    // 行：LLM
+    var rowY = function (i) { return padT + i * 23 + 9; };
+    ctx.fillStyle = 'rgba(99,102,241,.55)';
+    var llmTtft = state.run && state.run.llm && state.run.llm.ttft != null ? state.run.llm.ttft : null;
+    var llmMs = state.run && state.run.llm ? state.run.llm.atMs : null;
+    if (llmTtft != null && llmMs != null) {
+      ctx.fillRect(x(llmTtft), rowY(0) - 5, Math.max(2, x(llmMs) - x(llmTtft)), 10);
+    } else {
+      ctx.fillStyle = 'rgba(148,163,184,.18)';
+      ctx.fillRect(padL, rowY(0) - 5, w * 0.2, 10);
+    }
+
+    // 行：每句
+    items.forEach(function (it, i) {
+      var y = rowY(i + 1);
+      var split = it.splitMs == null ? 0 : it.splitMs;
+      var start = it.ttsStartMs == null ? split : it.ttsStartMs;
+      var ttfa = it.ttfaMs == null ? null : start + it.ttfaMs;
+      var end = it.synthMs == null ? null : start + it.synthMs;
+
+      // 排队
+      if (start > split) {
+        ctx.fillStyle = 'rgba(148,163,184,.35)';
+        ctx.fillRect(x(split), y - 2, Math.max(1, x(start) - x(split)), 4);
+      }
+      // 合成中（TTFA 之前）
+      if (ttfa != null) {
+        ctx.fillStyle = 'rgba(99,102,241,.5)';
+        ctx.fillRect(x(start), y - 5, Math.max(2, x(ttfa) - x(start)), 10);
+      }
+      // 音频产出
+      if (ttfa != null && end != null) {
+        ctx.fillStyle = 'rgba(129,140,248,.85)';
+        ctx.fillRect(x(ttfa), y - 5, Math.max(2, x(end) - x(ttfa)), 10);
+      }
+      // 可播时长
+      if (it.audioMs) {
+        ctx.fillStyle = 'rgba(129,140,248,.22)';
+        ctx.fillRect(x(start), y + 5, Math.max(2, (it.audioMs / total) * w), 2);
+      }
+      // 失败标记
+      if (it.ok === false) {
+        ctx.fillStyle = '#f87171';
+        ctx.fillRect(x(start), y - 6, 3, 12);
+      }
+    });
+
+    // 三条竖线
+    function marker(ms, color, dashed) {
+      if (ms == null) return;
+      var px = x(ms);
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      if (dashed) ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(px, padT - 2);
+      ctx.lineTo(px, cssH - 16);
+      ctx.stroke();
+      ctx.restore();
+    }
+    marker(state.run && state.run.firstSentenceMs, 'rgba(129,140,248,.9)', true);
+    marker(state.run && state.run.serverTtfaMs, 'rgba(52,211,153,.95)', false);
+    marker(state.run && state.run.e2eTtfa, 'rgba(34,211,238,.95)', false);
+  }
+
+  /* ==================== 历史与回放 ==================== */
+
+  function cacheRunAudio() {
+    if (!state.runId || !state.chunks.length || state.chunkBytes > MAX_PCM_BYTES) return;
+    state.pcmCache.set(state.runId, {
+      chunks: state.chunks.slice(),
+      sampleRate: state.sampleRate,
+      pcm: state.pcmMode
+    });
+    state.cacheOrder.push(state.runId);
+    state.cacheBytes += state.chunkBytes;
+    while (state.cacheOrder.length > MAX_PCM_RUNS || state.cacheBytes > MAX_PCM_BYTES) {
+      var oldId = state.cacheOrder.shift();
+      if (!oldId) break;
+      var rec = state.pcmCache.get(oldId);
+      if (rec) {
+        state.cacheBytes -= rec.chunks.reduce(function (n, c) { return n + c.length; }, 0);
+        state.pcmCache.delete(oldId);
+      }
+    }
+  }
+
+  function pushHistory(m, e2e, underruns) {
+    var llm = collectLlm();
+    var tts = collectTts();
+    state.history.unshift({
+      id: state.runId || uid(),
+      ts: Date.now(),
+      llmName: llm.name || llm.model,
+      ttsName: tts.name || tts.model,
+      chars: state.run.llmChars || 0,
+      sentences: m.sentenceCount || 0,
+      llmTtft: m.llmTtftMs,
+      firstSentence: m.firstSentenceMs,
+      serverTtfa: m.serverTtfaMs,
+      e2e: e2e,
+      underruns: underruns,
+      totalMs: m.totalMs,
+      ok: !m.partial
+    });
+    state.history = state.history.slice(0, HIST_LIMIT);
+    safeSet(LS_HIST, state.history);
+    renderHistory();
+  }
+
+  function renderHistory() {
+    var body = $('histBody');
+    $('histCount').textContent = state.history.length + ' 条';
+    if (!state.history.length) {
+      body.innerHTML = '<tr class="empty-row"><td colspan="10">跑一次就会出现在这里</td></tr>';
+      return;
+    }
+    body.innerHTML = state.history.map(function (r) {
+      var canReplay = state.pcmCache.has(r.id);
+      return '<tr>' +
+        '<td class="num">' + fmtClock(r.ts) + '</td>' +
+        '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.llmName) + ' <span style="color:var(--text-muted)">/</span> ' + esc(r.ttsName) + '</td>' +
+        '<td class="num">' + (r.chars || 0) + '</td>' +
+        '<td class="num">' + (r.sentences || 0) + '</td>' +
+        '<td class="num">' + fmtNum(r.llmTtft) + '</td>' +
+        '<td class="num">' + fmtNum(r.firstSentence) + '</td>' +
+        '<td class="num" style="color:var(--info)">' + fmtNum(r.e2e) + '</td>' +
+        '<td class="num" style="color:' + (r.underruns ? 'var(--warning)' : 'var(--text-muted)') + '">' + (r.underruns == null ? '—' : r.underruns) + '</td>' +
+        '<td class="num">' + fmtNum(r.totalMs) + '</td>' +
+        '<td>' + (canReplay
+          ? '<button class="btn btn-sm" data-replay="' + esc(r.id) + '">▶ 回放</button>'
+          : '<button class="btn btn-sm" disabled title="音频缓存已被淘汰">▶ 回放</button>') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function replay(runId) {
+    var rec = state.pcmCache.get(runId);
+    if (!rec) return toast('这次运行的音频已被淘汰', true);
+    if (state.replayPlayer) { state.replayPlayer.close(); state.replayPlayer = null; }
+    var p = new PcmPlayer(60);
+    state.replayPlayer = p;
+    p.setRate(rec.sampleRate);
+    p.resume();
+    if (rec.pcm) {
+      var total = rec.chunks.reduce(function (n, c) { return n + c.length; }, 0);
+      var all = new Uint8Array(total);
+      var off = 0;
+      rec.chunks.forEach(function (c) { all.set(c, off); off += c.length; });
+      p.push(all);
+    } else {
+      rec.chunks.forEach(function (c) { p.pushEncoded(c); });
+    }
+    toast('回放中…');
+  }
+
+  /* ==================== 事件绑定 ==================== */
+
+  function switchTab(kind) {
+    state.tab = kind;
+    $('poolTabs').querySelectorAll('button').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-tab') === kind);
+    });
+    $('llmPane').style.display = kind === 'llm' ? '' : 'none';
+    $('ttsPane').style.display = kind === 'tts' ? '' : 'none';
+  }
+
+  function bindEvents() {
+    $('poolTabs').addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-tab]');
+      if (!btn) return;
+      switchTab(btn.getAttribute('data-tab'));
+    });
+
+    $('llmList').addEventListener('click', function (e) {
+      var del = e.target.closest('[data-del]');
+      if (del) {
+        var id = del.getAttribute('data-del');
+        state.llm = state.llm.filter(function (r) { return r.id !== id; });
+        if (state.activeLlm === id) state.activeLlm = '';
+        persistLlm(); renderPool(); return;
+      }
+      var item = e.target.closest('[data-id]');
+      if (!item) return;
+      var rid = item.getAttribute('data-id');
+      for (var i = 0; i < state.llm.length; i++) {
+        if (state.llm[i].id === rid) { applyLlm(state.llm[i]); return; }
+      }
+    });
+
+    $('ttsList').addEventListener('click', function (e) {
+      var del = e.target.closest('[data-del]');
+      if (del) {
+        var id = del.getAttribute('data-del');
+        state.tts = state.tts.filter(function (r) { return r.id !== id; });
+        if (state.activeTts === id) state.activeTts = '';
+        persistTts(); renderPool(); return;
+      }
+      var item = e.target.closest('[data-id]');
+      if (!item) return;
+      var rid = item.getAttribute('data-id');
+      for (var i = 0; i < state.tts.length; i++) {
+        if (state.tts[i].id === rid) { applyTts(state.tts[i]); return; }
+      }
+    });
+
+    $('btnNewLlm').addEventListener('click', newLlm);
+    $('btnNewTts').addEventListener('click', newTts);
+    $('btnImportLlm').addEventListener('click', importLlm);
+    $('btnImportTts').addEventListener('click', importTts);
+    $('btnSaveLlm').addEventListener('click', saveLlm);
+    $('btnSaveTts').addEventListener('click', saveTts);
+
+    ['llmUrl', 'llmModel', 'thinkEnabled', 'thinkStyle', 'thinkEffort', 'thinkBudget'].forEach(function (id) {
+      $(id).addEventListener('input', updateThinkPreview);
+      $(id).addEventListener('change', updateThinkPreview);
+    });
+
+    $('ttsModel').addEventListener('input', function () {
+      $('ttsFamily').value = detectFamily($('ttsModel').value);
+      refreshVoices();
+    });
+    $('ttsKind').addEventListener('change', syncTtsKind);
+
+    $('prompt').addEventListener('input', saveLast);
+    document.querySelectorAll('[data-preset]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        $('prompt').value = PRESETS[b.getAttribute('data-preset')] || '';
+        saveLast();
+      });
+    });
+
+    ['splitFirstMin', 'splitFirstMax', 'splitMin', 'splitMax', 'splitSoftMin', 'splitIdleMs', 'leadMs'].forEach(function (id) {
+      $(id).addEventListener('change', saveCfg);
+    });
+    ['splitSoft', 'splitStripMd', 'splitKeepTags'].forEach(function (id) {
+      $(id).addEventListener('change', saveCfg);
+    });
+    document.querySelectorAll('input[name="conc"]').forEach(function (r) {
+      r.addEventListener('change', saveCfg);
+    });
+
+    $('btnRun').addEventListener('click', startRun);
+    $('btnStop').addEventListener('click', stopRun);
+    $('errorBox').addEventListener('click', hideError);
+
+    $('histBody').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-replay]');
+      if (btn) replay(btn.getAttribute('data-replay'));
+    });
+
+    $('btnClearHist').addEventListener('click', function () {
+      if (!state.history.length) return;
+      state.history = [];
+      safeSet(LS_HIST, []);
+      renderHistory();
+      toast('历史已清空');
+    });
+
+    var rt = 0;
+    window.addEventListener('resize', function () {
+      clearTimeout(rt);
+      rt = setTimeout(drawTimeline, 120);
+    });
+
+    window.addEventListener('beforeunload', function () {
+      if (state.controller) state.controller.abort();
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        startRun();
+      }
+    });
+  }
+
+  /* ==================== 启动 ==================== */
+
+  function checkServer() {
+    fetch('/api/health', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var list = j && j.features;
+        if (Array.isArray(list) && list.indexOf('pipeline') < 0) {
+          var bar = $('connBanner');
+          bar.style.display = '';
+          bar.textContent = '⚠️ 服务端还没加载联调接口（旧版进程）：请重启 `npm start` 后再刷新本页';
+        }
+      })
+      .catch(function () {
+        var bar = $('connBanner');
+        bar.style.display = '';
+        bar.textContent = '⚠️ 连不上本地服务（3210）。请先运行 `npm start`，并通过 http://localhost:3210/pipeline.html 打开本页';
+      });
+  }
+
+  function init() {
+    loadStore();
+    restoreCfg();
+    restoreLast();
+    renderPool();
+    renderHistory();
+    syncTtsKind();
+    refreshVoices();
+    updateThinkPreview();
+    bindEvents();
+    setMode('idle');
+    drawTimeline();
+    checkServer();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

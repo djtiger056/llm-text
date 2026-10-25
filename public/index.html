@@ -1,0 +1,1930 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Speed Test - 模型速度测试</title>
+  <!-- 空 favicon：阻止浏览器发出 /favicon.ico 404 请求 -->
+  <link rel="icon" href="data:,">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --glass-bg: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-hover: rgba(255, 255, 255, 0.07);
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.3);
+      --accent-light: #818cf8;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+    }
+
+    /* ========== 一屏布局：顶栏 + 配置卡 + 结果区 + 历史，整体不滚动 ========== */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* 背景动效 */
+    .bg-effects {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .bg-effects::before {
+      content: '';
+      position: absolute;
+      top: -30%;
+      left: -10%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+      animation: float1 20s ease-in-out infinite;
+    }
+    .bg-effects::after {
+      content: '';
+      position: absolute;
+      bottom: -20%;
+      right: -10%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(52, 211, 153, 0.08) 0%, transparent 70%);
+      animation: float2 25s ease-in-out infinite;
+    }
+    @keyframes float1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(80px, 60px) scale(1.1); }
+    }
+    @keyframes float2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-60px, -40px) scale(1.15); }
+    }
+
+    /* 后端连接提示横幅 */
+    .conn-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 10px 20px;
+      background: rgba(251, 191, 36, 0.12);
+      border-bottom: 1px solid rgba(251, 191, 36, 0.35);
+      color: var(--warning);
+      font-size: 13px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+    .conn-banner code {
+      font-family: var(--font-mono);
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .conn-banner b { color: var(--text-primary); }
+
+    /* 容器：占满视口；正常情况下一屏放完，页面不滚动。
+       仅当展开预览等导致内容超高时，才出现容器级滚动兜底 */
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1600px;
+      height: 100vh;
+      margin: 0 auto;
+      padding: 10px 18px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* 顶栏：标题 + 导航一行搞定 */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .header { margin: 0; display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+    .header h1 {
+      font-size: 1.08rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #f1f5f9, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .header p {
+      color: var(--text-secondary);
+      font-size: 0.74rem;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 玻璃卡片 */
+    .glass-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 11px 14px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+    .glass-card:hover {
+      background: var(--glass-hover);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    .config-card { display: flex; flex-direction: column; gap: 9px; }
+
+    /* 预设按钮 */
+    .presets-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .presets-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+    .preset-btn {
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      color: var(--text-secondary);
+      font-size: 0.74rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+      white-space: nowrap;
+    }
+    .preset-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent-light);
+      background: rgba(99, 102, 241, 0.08);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .preset-btn.active {
+      border-color: var(--accent);
+      color: #fff;
+      background: rgba(99, 102, 241, 0.15);
+    }
+
+    /* ========== 表单：24 列细网格，两行放完所有测试参数 ==========
+       行1：API 地址 / API Key / 模型名称（Key 与模型拿到 30% 左右宽度，不再被挤掉）
+       行2：测试 Prompt / Max Tokens / Temperature + 思考控制（shared.js 注入的
+            结构经 display:contents 拍平后，直接参与本网格布局） */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(24, minmax(0, 1fr));
+      column-gap: 10px;
+      row-gap: 8px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+    .form-group label {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lab-tip {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-left: 4px;
+    }
+    .f-url   { grid-column: span 9; }
+    .f-key   { grid-column: span 8; }
+    .f-model { grid-column: span 7; }
+    .f-prompt { grid-column: span 8; }
+    .f-num   { grid-column: span 2; }
+
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 9px;
+      border: 1px solid var(--glass-border);
+      background: rgba(0, 0, 0, 0.3);
+      color: var(--text-primary);
+      font-size: 0.83rem;
+      outline: none;
+      transition: all 0.2s ease;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    .form-group input:focus, .form-group textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .form-group input::placeholder, .form-group textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* 带后缀按钮的输入容器（API Key 的显示/隐藏） */
+    .input-affix {
+      display: flex;
+      align-items: stretch;
+      min-width: 0;
+      border: 1px solid var(--glass-border);
+      border-radius: 9px;
+      background: rgba(0, 0, 0, 0.3);
+      transition: all 0.2s ease;
+      overflow: hidden;
+    }
+    .input-affix:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .input-affix input,
+    .input-affix input:focus {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .affix-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+      border: none;
+      border-left: 1px solid rgba(255, 255, 255, 0.07);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.18s ease;
+      font-size: 0.8rem;
+    }
+    .affix-btn:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
+    .affix-btn.on { color: var(--accent-light); }
+
+    /* ========== 思考控件：display:contents 拍平进表单网格 ========== */
+    #thinkingSlot,
+    #thinkingSlot > .sc-field-block,
+    #thinkingSlot .think-grid { display: contents; }
+    #thinkingSlot > .sc-field-block > .sc-label { display: none; }
+    #thinkingSlot .think-grid > .sc-field:nth-child(1) { grid-column: span 2; }
+    #thinkingSlot .think-grid > .sc-field:nth-child(2) { grid-column: span 4; }
+    #thinkingSlot .think-grid > .sc-field:nth-child(3) { grid-column: span 3; }
+    #thinkingSlot .think-grid > .sc-field:nth-child(4) { grid-column: span 3; }
+    /* 开关单元格自带分组标签（原分组大标题在单行布局里省掉） */
+    #thinkingSlot .think-grid > .sc-field:nth-child(1)::before {
+      content: '思考控制';
+      display: block;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin-bottom: 3px;
+      letter-spacing: 0.02em;
+    }
+    #thinkingSlot .think-grid > .sc-field:nth-child(1) .switch { padding: 9px 0 8px; }
+    #thinkingSlot .sc-code, #thinkingSlot .sc-hint { grid-column: 1 / -1; }
+    #thinkingSlot .sc-code { margin-top: 2px; }
+    /* 风格说明压成一行，超出省略，悬停可看完整 */
+    #thinkingHint {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin: 0;
+    }
+
+    /* 按钮 */
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn {
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      border: none;
+      font-size: 0.83rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(99, 102, 241, 0.45);
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-primary.btn-stop {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 4px 20px rgba(239, 68, 68, 0.35);
+    }
+    .btn-primary.btn-stop:hover {
+      box-shadow: 0 6px 28px rgba(239, 68, 68, 0.5);
+    }
+    .btn-secondary {
+      background: var(--glass-bg);
+      color: var(--text-secondary);
+      border: 1px solid var(--glass-border);
+      font-weight: 500;
+    }
+    .btn-secondary:hover {
+      background: var(--glass-hover);
+      color: var(--text-primary);
+    }
+    .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* 运行状态（测试中显示在按钮行右侧） */
+    .run-status {
+      display: none;
+      margin-left: auto;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.76rem;
+      color: var(--accent-light);
+      font-family: var(--font-mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 52%;
+    }
+    body.testing .run-status { display: inline-flex; }
+    .run-status::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-light);
+      animation: pulse 1.1s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.25; }
+    }
+    /* 快捷键提示（空闲时显示） */
+    .kbd-hint {
+      margin-left: auto;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .kbd-hint kbd {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--glass-border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--text-secondary);
+    }
+    body.testing .kbd-hint { display: none; }
+
+    /* 加载动画 */
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-hint {
+      border: 1px dashed var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 11px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      line-height: 1.7;
+      flex-shrink: 0;
+    }
+    .empty-hint b { color: var(--text-secondary); font-weight: 500; }
+
+    /* ========== 结果区 ========== */
+    .results-line {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .metric-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 9px 8px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+      animation: fadeUp 0.4s ease forwards;
+      opacity: 0;
+    }
+    .metric-card:nth-child(1) { animation-delay: 0.04s; }
+    .metric-card:nth-child(2) { animation-delay: 0.08s; }
+    .metric-card:nth-child(3) { animation-delay: 0.12s; }
+    .metric-card:nth-child(4) { animation-delay: 0.16s; }
+    .metric-card:nth-child(5) { animation-delay: 0.2s; }
+    .metric-card:nth-child(6) { animation-delay: 0.24s; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .metric-value {
+      font-size: 1.2rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 2px;
+      white-space: nowrap;
+    }
+    .metric-value.waiting { color: var(--text-muted); font-weight: 500; }
+    .metric-value .metric-unit {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-left: 2px;
+      font-weight: 400;
+    }
+    /* 对比上一次测试的增量标记（绿=更快 红=更慢） */
+    .delta {
+      font-size: 0.62rem;
+      margin-left: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      vertical-align: 2px;
+      letter-spacing: -0.02em;
+    }
+    .delta.good { color: var(--success); }
+    .delta.bad { color: var(--danger); }
+
+    .metric-label {
+      font-size: 0.73rem;
+      color: var(--text-secondary);
+    }
+    .metric-card .metric-label { font-size: 0.73rem; }
+
+    .color-accent { color: var(--accent-light); }
+    .color-success { color: var(--success); }
+    .color-warning { color: var(--warning); }
+    .color-danger { color: var(--danger); }
+
+    /* 扩展指标 chips：输入/思考 Tokens、chunk 抖动、实际下发参数等 */
+    .metrics-foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 9px;
+      border-radius: 20px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .chip i { font-style: normal; color: var(--text-muted); font-size: 0.68rem; }
+    .chip b { font-family: var(--font-mono); color: var(--text-primary); font-weight: 600; font-size: 0.74rem; }
+    .chip.warn { border-color: rgba(251, 191, 36, 0.4); color: var(--warning); }
+    .applied-line {
+      flex-basis: 100%;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .applied-line code {
+      font-family: var(--font-mono);
+      color: var(--accent-light);
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      padding: 1px 6px;
+      border-radius: 5px;
+      font-size: 0.7rem;
+    }
+
+    /* 回复/思考预览：两个折叠块并排一行 */
+    .preview-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      flex-shrink: 0;
+    }
+    .preview-row .content-preview { flex: 1; min-width: 0; }
+    .content-preview summary {
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      padding: 5px 0;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      list-style: none;
+    }
+    .content-preview summary::-webkit-details-marker { display: none; }
+    .content-preview summary .caret {
+      display: inline-block;
+      font-size: 0.66rem;
+      color: var(--text-muted);
+      transition: transform 0.18s ease;
+    }
+    .content-preview[open] summary .caret { transform: rotate(90deg); }
+    .content-preview .preview-len {
+      margin-left: auto;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-weight: 400;
+    }
+    .content-preview pre {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 230px;
+      overflow-y: auto;
+      margin-top: 4px;
+      font-family: var(--font-mono);
+    }
+    /* 流式输出时在末尾显示光标 */
+    .content-preview pre.streaming::after {
+      content: '▍';
+      color: var(--accent-light);
+      animation: blink 0.8s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* 错误提示：悬浮在页面顶部居中，不挤动布局；点击即关闭 */
+    .error-box {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(760px, 92vw);
+      max-height: 46vh;
+      overflow-y: auto;
+      background: rgba(30, 14, 18, 0.97);
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      border-radius: var(--radius-sm);
+      padding: 11px 14px;
+      color: var(--danger);
+      font-size: 0.8rem;
+      display: none;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      z-index: 500;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+      cursor: pointer;
+    }
+    .error-box.visible { display: block; }
+
+    /* 历史记录：吃掉剩余高度，行多时表格内部滚动（页面本身不滚） */
+    .history-section {
+      flex: 1 1 auto;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .history-section h3 {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      font-weight: 500;
+      flex-shrink: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .hist-meta { font-weight: 400; color: var(--text-muted); font-size: 0.7rem; }
+    .table-wrap {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .table-wrap::-webkit-scrollbar { width: 6px; }
+    .table-wrap::-webkit-scrollbar-track { background: transparent; }
+    .table-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+    .history-table th {
+      text-align: left;
+      padding: 7px 9px;
+      color: var(--text-muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--glass-border);
+      position: sticky;
+      top: 0;
+      background: #0d1220;
+    }
+    .history-table td {
+      padding: 6px 9px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+    .history-table td.c-good { color: var(--success); }
+    .history-table td.c-warn { color: var(--warning); }
+    .history-table td.c-bad { color: var(--danger); }
+    .history-table tr.best td { background: rgba(251, 191, 36, 0.05); }
+    .history-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .hist-best { font-size: 0.72rem; margin-left: 2px; }
+    .history-table td.hist-empty {
+      text-align: center;
+      color: var(--text-muted);
+      font-family: inherit;
+      padding: 16px 0;
+      letter-spacing: 0.01em;
+    }
+
+    /* 进度条 */
+    .progress-bar {
+      height: 3px;
+      background: rgba(99, 102, 241, 0.15);
+      border-radius: 2px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress-bar.active { display: block; }
+    .progress-bar::after {
+      content: '';
+      display: block;
+      height: 100%;
+      width: 40%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-light));
+      border-radius: 2px;
+      animation: progress 1.2s ease-in-out infinite;
+    }
+    @keyframes progress {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+
+    /* ========== 共享组件（结构由 shared.js 注入） ========== */
+    .topnav {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 13px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .topnav a {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 15px;
+      border-radius: 9px;
+      color: var(--text-secondary);
+      font-size: 0.82rem;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .topnav a:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+    .topnav a.active {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+
+    .sc-label {
+      display: block;
+      font-size: 0.74rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin-bottom: 4px;
+      letter-spacing: 0.02em;
+    }
+    .sc-select, .sc-input {
+      width: 100%;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border);
+      background: rgba(0, 0, 0, 0.3);
+      color: var(--text-primary);
+      font-size: 0.82rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .sc-select:focus, .sc-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .sc-select option { background: #111827; }
+    .sc-btn {
+      padding: 8px 13px;
+      border-radius: 9px;
+      border: 1px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+    .sc-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--text-primary);
+      background: rgba(99, 102, 241, 0.12);
+    }
+    .sc-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+    .sc-btn.accent {
+      border-color: rgba(99, 102, 241, 0.45);
+      color: var(--accent-light);
+      background: rgba(99, 102, 241, 0.12);
+    }
+    .sc-btn.danger:hover:not(:disabled) {
+      border-color: var(--danger);
+      color: var(--danger);
+      background: rgba(248, 113, 113, 0.12);
+    }
+    .sc-hint {
+      margin: 8px 0 0;
+      font-size: 0.72rem;
+      line-height: 1.65;
+      color: var(--text-muted);
+    }
+    .sc-field-block { margin-top: 0; min-width: 0; }
+    .sc-field { min-width: 0; }
+    /* 渠道气泡：整块压成一行 —— 标签 | 气泡(满时横向滚动) | 名称输入 | 覆盖 | 保存 */
+    .chan-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chan-bar > .sc-hint { display: none; }
+    .chan-head, .chan-row.chan-edit { display: contents; }
+    .chan-head .sc-label { order: 0; white-space: nowrap; flex-shrink: 0; }
+    .chan-head .sc-btn, .chan-edit .sc-btn { flex-shrink: 0; }
+    .chan-bubbles { order: 1; }
+    #channelName { order: 2; width: 170px; flex: 0 0 auto; }
+    .chan-edit .sc-btn { order: 3; }
+    .chan-head .sc-btn { order: 4; }
+    .chan-bubbles {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 6px;
+      flex: 1 1 260px;
+      min-width: 0;
+      overflow-x: auto;
+      padding: 2px 0;
+    }
+    .chan-bubbles::-webkit-scrollbar { height: 5px; }
+    .chan-bubbles::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+    .chan-empty {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      padding: 7px 0;
+      white-space: nowrap;
+    }
+    .chan-bubble {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      max-width: 260px;
+      padding: 5px 8px 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      position: relative;
+    }
+    .chan-bubble:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+      background: rgba(99, 102, 241, 0.12);
+    }
+    .chan-bubble.active {
+      border-color: var(--accent);
+      color: #fff;
+      background: rgba(99, 102, 241, 0.2);
+      box-shadow: 0 0 0 1px var(--accent-glow);
+    }
+    .chan-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 150px;
+    }
+    .chan-model {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 92px;
+    }
+    .chan-bubble.active .chan-model { color: rgba(255,255,255,0.75); }
+    .chan-del {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      font-size: 13px;
+      line-height: 1;
+      color: var(--text-muted);
+      transition: all 0.18s ease;
+      flex-shrink: 0;
+    }
+    .chan-del:hover { background: rgba(248, 113, 113, 0.22); color: var(--danger); }
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+    .switch input {
+      width: 16px; height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .sc-code {
+      display: none;
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 9px;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      background: rgba(99, 102, 241, 0.08);
+      color: var(--accent-light);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.6;
+      word-break: break-all;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sc-code.active { display: block; }
+    /* 测试通过后的存渠道面板：右下角浮层，出现/消失都不挤动布局 */
+    .save-row {
+      display: none;
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 400;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 12px 14px;
+      background: rgba(17, 24, 39, 0.97);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      border-radius: 12px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+      max-width: min(480px, 92vw);
+    }
+    .save-row .sc-input { flex: 1 1 200px; width: auto; }
+    .save-row .sc-hint { flex-basis: 100%; margin: 0; font-size: 0.7rem; }
+    .sc-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 34px;
+      transform: translateX(-50%) translateY(14px);
+      opacity: 0;
+      padding: 10px 20px;
+      border-radius: 11px;
+      background: rgba(17, 24, 39, 0.96);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      z-index: 9999;
+      pointer-events: none;
+      transition: all 0.25s ease;
+      box-shadow: 0 10px 34px rgba(0,0,0,0.45);
+      max-width: 86vw;
+      text-align: center;
+    }
+    .sc-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .sc-toast.ok { border-color: rgba(52, 211, 153, 0.5); color: #a7f3d0; }
+    .sc-toast.err { border-color: rgba(248, 113, 113, 0.5); color: #fecaca; }
+
+    /* ========== 响应式 ========== */
+    @media (max-width: 1360px) {
+      .presets-label { display: none; }
+    }
+    /* 思考控件不再挤在同一行：给它独占一行的空间 */
+    @media (max-width: 1240px) {
+      .f-prompt { grid-column: span 14; }
+      .f-num { grid-column: span 5; }
+      #thinkingSlot .think-grid > .sc-field:nth-child(1) { grid-column: span 4; }
+      #thinkingSlot .think-grid > .sc-field:nth-child(2) { grid-column: span 8; }
+      #thinkingSlot .think-grid > .sc-field:nth-child(3) { grid-column: span 6; }
+      #thinkingSlot .think-grid > .sc-field:nth-child(4) { grid-column: span 6; }
+    }
+    @media (max-width: 1180px) {
+      .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .header p { display: none; }
+    }
+    @media (max-width: 860px) {
+      body { height: auto; overflow-y: auto; }
+      .container { height: auto; min-height: 100vh; padding: 10px 12px; }
+      .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .preview-row { flex-direction: column; }
+      .history-section { flex: 0 0 auto; min-height: 160px; }
+      .f-url, .f-key, .f-model, .f-prompt, .f-num { grid-column: 1 / -1; }
+      #thinkingSlot .think-grid > .sc-field { grid-column: 1 / -1; }
+      .run-status { max-width: 100%; }
+      .kbd-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="conn-banner" id="connBanner" style="display:none">
+    ⚠️ 未检测到后端服务。请先在项目目录运行 <code>npm start</code>，再访问
+    <b>http://localhost:3210</b>（当前页面可能来自静态预览，它只展示页面、没有接口）。
+  </div>
+  <div class="bg-effects"></div>
+
+  <div class="container">
+    <div class="topbar">
+      <div class="header">
+        <h1>LLM Speed Test</h1>
+        <p>实时流式测速 · 首包延迟 · 生成速度 · Token 统计</p>
+      </div>
+      <nav class="topnav">
+        <a href="/" class="active">⚡ 速度测试</a>
+        <a href="/chat.html">💬 聊天测试</a>
+        <a href="/tts.html">🎙 语音合成</a>
+        <a href="/pipeline.html">🔗 链路联调</a>
+        <a href="/voice.html">🎧 语音对话</a>
+      </nav>
+    </div>
+
+    <!-- 配置卡：渠道 / 预设 / 表单（两行放完所有参数）/ 操作，一屏放完 -->
+    <div class="glass-card config-card">
+      <div id="channelBarSlot"></div>
+
+      <div class="presets-row">
+        <span class="presets-label">快捷预设</span>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div class="form-grid">
+        <!-- 行1：接口信息 -->
+        <div class="form-group f-url">
+          <label>API 地址<span class="lab-tip">OpenAI 兼容端点</span></label>
+          <input type="text" id="apiUrl" list="urlOptions" placeholder="https://你的中转站/v1（只填域名也行，阿里云自动补 /compatible-mode/v1）" spellcheck="false" autocomplete="off">
+          <datalist id="urlOptions"></datalist>
+        </div>
+        <div class="form-group f-key">
+          <label>API Key</label>
+          <div class="input-affix">
+            <input type="password" id="apiKey" placeholder="sk-..." spellcheck="false" autocomplete="off">
+            <button type="button" class="affix-btn" id="keyToggle" title="显示 / 隐藏 Key">👁</button>
+          </div>
+        </div>
+        <div class="form-group f-model">
+          <label>模型名称</label>
+          <input type="text" id="modelName" list="modelOptions" placeholder="deepseek-chat" spellcheck="false" autocomplete="off">
+          <datalist id="modelOptions"></datalist>
+        </div>
+
+        <!-- 行2：测试参数（Prompt / 生成参数 / 思考控制同一行） -->
+        <div class="form-group f-prompt">
+          <label>测试 Prompt<span class="lab-tip">留空用默认</span></label>
+          <input type="text" id="testPrompt" placeholder="留空则用默认：请用500字左右介绍一下量子计算的基本原理和应用前景。" spellcheck="false">
+        </div>
+        <div class="form-group f-num">
+          <label>Max Tokens</label>
+          <input type="number" id="maxTokens" value="512" min="64" max="8192">
+        </div>
+        <div class="form-group f-num">
+          <label>Temperature</label>
+          <input type="number" id="temperature" value="0.7" min="0" max="2" step="0.1">
+        </div>
+        <div id="thinkingSlot"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="startBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          开始测试
+        </button>
+        <button class="btn btn-secondary" id="multiBtn">连续 3 次</button>
+        <button class="btn btn-secondary" id="diagBtn">诊断地址</button>
+        <button class="btn btn-secondary" id="clearBtn">清空记录</button>
+        <span class="run-status" id="liveStatus"></span>
+        <span class="kbd-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> 开始测试</span>
+      </div>
+
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <!-- 结果区：实时指标 + 扩展指标 + 预览 -->
+    <div class="results-line" id="resultsSection">
+      <div class="empty-hint" id="emptyHint">
+        填好上方配置，点「<b>开始测试</b>」或按 <b>Ctrl + Enter</b> —— 测试过程实时流式展示，结束自动记录
+      </div>
+      <div class="metrics-grid" id="metricsGrid" style="display:none"></div>
+      <div class="metrics-foot" id="metricsFoot" style="display:none"></div>
+      <div class="preview-row">
+        <details class="content-preview glass-card" id="contentPreview" style="display:none">
+          <summary>
+            <span class="caret">▸</span>
+            <span>模型回复</span>
+            <span class="preview-len" id="contentLen"></span>
+          </summary>
+          <pre id="contentText"></pre>
+        </details>
+        <details class="content-preview glass-card" id="reasoningPreview" style="display:none">
+          <summary>
+            <span class="caret">▸</span>
+            <span>思考过程（reasoning_content）</span>
+            <span class="preview-len" id="reasoningLen"></span>
+          </summary>
+          <pre id="reasoningText"></pre>
+        </details>
+      </div>
+    </div>
+
+    <!-- 历史记录：吃掉剩余高度，行多时表格内部滚动 -->
+    <div class="history-section glass-card" id="historySection">
+      <h3>测试记录 <span class="hist-meta" id="histMeta"></span></h3>
+      <div class="table-wrap">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>模型</th>
+              <th>首包延迟</th>
+              <th>总耗时</th>
+              <th>速度</th>
+              <th>Tokens</th>
+              <th>时间</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 浮层放容器外：fixed 元素不能处于带 backdrop-filter 的卡片里，否则定位基准会错 -->
+  <div id="saveSlot"></div>
+  <div class="error-box" id="errorBox" title="点击关闭" onclick="hideError()"></div>
+
+  <script src="/shared.js"></script>
+  <script>
+    'use strict';
+
+    // ========== 国内模型预设 ==========
+    const PRESETS = [
+      { name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' },
+      { name: 'DeepSeek-R1', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-reasoner' },
+      { name: 'Qwen-Max', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-max' },
+      { name: 'Qwen-Plus', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
+      { name: 'Qwen-Turbo', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-turbo' },
+      { name: '豆包', url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-seed-2-1-pro' },
+      { name: '月之暗面', url: 'https://api.moonshot.cn/v1/chat/completions', model: 'moonshot-v1-8k' },
+      { name: '智谱 GLM', url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', model: 'glm-4-flash' },
+      { name: '硅基流动', url: 'https://api.siliconflow.cn/v1/chat/completions', model: 'Qwen/Qwen2.5-72B-Instruct' },
+      { name: '零一万物', url: 'https://api.lingyiwanwu.com/v1/chat/completions', model: 'yi-lightning' },
+      { name: '百度文心', url: 'https://qianfan.baidubce.com/v2/chat/completions', model: 'ernie-4.0-turbo-8k' },
+      { name: 'MiniMax', url: 'https://api.minimaxi.com/v1/chat/completions', model: 'MiniMax-M3' },
+    ];
+
+    const $ = id => document.getElementById(id);
+    const PLAY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    const STOP_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
+    const HISTORY_KEY = 'llm-speed-history-v1';
+
+    let history = [];          // 测试记录（持久化到 localStorage）
+    let lastRun = null;        // 上一次完整结果 { metrics, model, content, reasoning }
+    let running = false;       // 是否有测试正在跑
+    let stopRequested = false; // 用户点了停止
+    let activeAbort = null;    // 当前 fetch 的 AbortController
+    let liveState = null;      // 实时流状态
+    let common = null;         // shared.js 实例，初始化时赋值（先声明，避免 TDZ 引用报错）
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    function fmtSec(ms) { return (ms / 1000).toFixed(2); }
+
+    // ========== URL 校验与友好错误提示 ==========
+    // 只校验格式与协议；路径不做拦截——
+    // base URL（如 https://api.xxx.com 或 .../v1）与完整端点均可，服务端会自动补全 /chat/completions
+    function validateApiUrl(url) {
+      let u;
+      try { u = new URL(url); } catch { return 'URL 格式无效，应以 http:// 或 https:// 开头'; }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return 'URL 协议不支持，仅支持 http:// 或 https://';
+      return null;
+    }
+
+    function friendlyHttpError(msg) {
+      const text = String(msg || '');
+      const m = text.match(/^HTTP (\d{3})/);
+      if (!m) return text;
+      const code = +m[1];
+      const detail = text.slice(m[0].length).trim();
+      const map = {
+        400: '请求参数有误：模型名可能不存在，或参数不合法',
+        401: 'API Key 无效或未授权，请检查 Key 是否正确、是否已开通该模型',
+        403: '无权访问：Key 权限不足、已过期或被禁用',
+        404: '接口地址错误：该路径不存在。注意有些中转站"主站域名"只用于网页访问，API 需要用文档里标注的专用接口域名；可点「诊断地址」自动探测可用端点',
+        405: '接口地址不正确（不支持该方法），请检查 URL',
+        413: '请求体过大：请减少 prompt 长度或降低 maxTokens',
+        429: '触发限流：请求过于频繁，请稍等片刻再试',
+        500: '目标服务器内部错误（服务商侧问题，可稍后重试）',
+        502: '目标服务器网关错误（服务商侧问题，可稍后重试）',
+        503: '目标服务器暂不可用（可能维护中，可稍后重试）'
+      };
+      const tip = map[code] || `目标服务器返回错误（HTTP ${code}）`;
+      return detail ? `${tip}\n详情：${detail}` : tip;
+    }
+
+    // 浏览器 fetch 层失败的统一提示（network error 等，通常是页面没走本服务端口）
+    function netErrorHint(err) {
+      const raw = String((err && err.message) || '');
+      return /fetch failed|network error|networkerror|failed to fetch|load failed|net::/i.test(raw)
+        ? '无法连接到后端服务：请确认已运行 npm start，并通过 http://localhost:3210 访问本页面（静态预览地址没有接口）'
+        : raw;
+    }
+
+    function escapeHtml(str) {
+      return String(str == null ? '' : str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+
+    // ========== 本地持久化（配置） ==========
+    // 基础字段自动保存；思考开关与渠道列表由 shared.js 统一管理
+    const CONFIG_KEY = 'llm-speed-config-v1';
+    const CONFIG_FIELDS = ['apiUrl', 'apiKey', 'modelName', 'testPrompt', 'maxTokens', 'temperature'];
+
+    function saveConfig() {
+      try {
+        const cfg = {};
+        CONFIG_FIELDS.forEach(id => { cfg[id] = $(id).value; });
+        cfg.thinking = LLMCommon.readThinking();
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+      } catch (e) { /* localStorage 不可用时静默降级 */ }
+    }
+
+    function loadConfig() {
+      try {
+        const raw = localStorage.getItem(CONFIG_KEY);
+        if (!raw) return;
+        const cfg = JSON.parse(raw);
+        CONFIG_FIELDS.forEach(id => {
+          if (cfg[id] != null) $(id).value = cfg[id];
+        });
+        if (cfg.thinking) LLMCommon.applyThinking(cfg.thinking);
+      } catch (e) { /* 数据损坏时忽略 */ }
+    }
+
+    // ========== 输入建议（模型名 / 地址） ==========
+    // 来源：预设 + 已保存渠道 —— 换模型测试时不用手打全名
+    function refreshSuggestions() {
+      const models = new Set(PRESETS.map(p => p.model));
+      const urls = new Set();
+      try {
+        LLMCommon.readChannels().forEach(c => {
+          if (c.model) models.add(c.model);
+          if (c.url) urls.add(c.url);
+        });
+      } catch (e) { /* 渠道不可读时只用预设 */ }
+      $('modelOptions').innerHTML = [...models].map(m => `<option value="${escapeHtml(m)}"></option>`).join('');
+      $('urlOptions').innerHTML = [...urls].map(u => `<option value="${escapeHtml(u)}"></option>`).join('');
+    }
+
+    // ========== 预设 ==========
+    function renderPresets() {
+      const container = $('presets');
+      container.innerHTML = PRESETS.map((p, i) =>
+        `<button class="preset-btn" onclick="applyPreset(${i})" title="${p.url}">${p.name}</button>`
+      ).join('');
+    }
+
+    function applyPreset(index) {
+      const p = PRESETS[index];
+      $('apiUrl').value = p.url;
+      $('modelName').value = p.model;
+      saveConfig();
+      document.querySelectorAll('.preset-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+      });
+    }
+
+    // ========== 参数收集 ==========
+    function collectParams() {
+      return {
+        url: $('apiUrl').value.trim(),
+        apiKey: $('apiKey').value.trim(),
+        model: $('modelName').value.trim(),
+        prompt: $('testPrompt').value.trim(),
+        maxTokens: parseInt($('maxTokens').value) || 512,
+        temperature: parseFloat($('temperature').value) || 0.7,
+        thinking: LLMCommon.readThinking()
+      };
+    }
+
+    // ========== 运行状态 ==========
+    function setRunStatus(text) {
+      const el = $('liveStatus');
+      if (el) el.textContent = text || '';
+    }
+
+    function setRunning(on) {
+      running = on;
+      document.body.classList.toggle('testing', on);
+      const btn = $('startBtn');
+      btn.classList.toggle('btn-stop', on);
+      btn.innerHTML = on ? STOP_SVG + ' 停止' : PLAY_SVG + ' 开始测试';
+      ['multiBtn', 'diagBtn', 'clearBtn'].forEach(id => { const b = $(id); if (b) b.disabled = on; });
+      $('progressBar').classList.toggle('active', on);
+      if (!on) { stopRequested = false; setRunStatus(''); }
+    }
+
+    function requestStop() {
+      stopRequested = true;
+      if (activeAbort) activeAbort.abort();
+      setRunStatus('正在停止…');
+    }
+
+    // ========== 实时指标（流式过程中滚动更新） ==========
+    function ttftClass(v) {
+      return v == null ? null : v < 500 ? 'color-success' : v < 1500 ? 'color-warning' : 'color-danger';
+    }
+    function speedClass(v) {
+      if (!v) return null;
+      return v >= 50 ? 'color-success' : v >= 20 ? 'color-warning' : 'color-danger';
+    }
+
+    function liveCardSkeletonHTML() {
+      const card = (id, label, unit) => `
+        <div class="metric-card">
+          <div class="metric-value waiting" id="${id}">—${unit ? `<span class="metric-unit">${unit}</span>` : ''}</div>
+          <div class="metric-label">${label}</div>
+        </div>`;
+      return card('mv-ttft', '首包延迟 (TTFT)', 'ms')
+        + card('mv-total', '完整耗时', 's')
+        + card('mv-tps', '生成速度', 't/s')
+        + card('mv-tokens', '输出 Tokens', '')
+        + card('mv-chunks', 'SSE Chunks', '')
+        + card('mv-firstchunk', '首 Chunk', 'ms');
+    }
+
+    function setLiveValue(id, text, cls) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const first = el.firstChild;
+      if (first && first.nodeType === 3) first.nodeValue = String(text);
+      el.className = 'metric-value' + (cls ? ' ' + cls : ' waiting');
+    }
+
+    function beginLive(label) {
+      document.body.classList.add('testing');
+      $('emptyHint').style.display = 'none';
+      const grid = $('metricsGrid');
+      grid.style.display = 'grid';
+      grid.innerHTML = liveCardSkeletonHTML();
+      $('metricsFoot').style.display = 'none';
+      $('metricsFoot').innerHTML = '';
+      ['contentText', 'reasoningText'].forEach(id => { $(id).textContent = ''; $(id).classList.remove('streaming'); });
+      $('contentPreview').style.display = 'none';
+      $('reasoningPreview').style.display = 'none';
+      $('contentLen').textContent = '';
+      $('reasoningLen').textContent = '';
+      liveState = { label: label || '', t0: performance.now(), firstAt: null, chars: 0, rchars: 0, chunks: 0, ticker: null };
+      liveState.ticker = setInterval(tickLive, 120);
+      tickLive();
+    }
+
+    function tickLive() {
+      const t = liveState;
+      if (!t) return;
+      const now = performance.now();
+      const elapsed = now - t.t0;
+      const totalChars = t.chars + t.rchars;
+
+      // 首包：未到达前用「已耗时」滚动展示（它至少这么久了），到达后定格
+      const ttftNow = t.firstAt == null ? Math.round(elapsed) : Math.round(t.firstAt - t.t0);
+      setLiveValue('mv-ttft', ttftNow, t.firstAt == null ? null : ttftClass(ttftNow));
+      setLiveValue('mv-total', (elapsed / 1000).toFixed(2), 'color-accent');
+
+      let tps = null;
+      if (t.firstAt != null && totalChars > 0) {
+        const sec = (now - t.firstAt) / 1000;
+        if (sec > 0.15) tps = Math.round((totalChars / 1.5 / sec) * 10) / 10;
+      }
+      setLiveValue('mv-tps', tps == null ? '—' : '~' + tps, speedClass(tps));
+      setLiveValue('mv-tokens', totalChars ? '~' + Math.round(totalChars / 1.5) : '—', totalChars ? 'color-accent' : null);
+      setLiveValue('mv-chunks', t.chunks || '—', null);
+
+      const status = (t.label ? t.label + ' · ' : '')
+        + (t.firstAt == null
+          ? '等待首包… ' + (elapsed / 1000).toFixed(1) + 's'
+          : `已收 ${totalChars} 字 · ${(elapsed / 1000).toFixed(1)}s` + (tps != null ? ` · ~${tps} t/s` : ''));
+      setRunStatus(status);
+    }
+
+    function endLive() {
+      // 注意：不在这里摘 body.testing —— 一次测试结束但「连续 N 次」可能还有下一轮，
+      // 由 setRunning(false) 统一收尾，避免轮次间隔里状态行/停止按钮闪烁
+      if (liveState && liveState.ticker) clearInterval(liveState.ticker);
+      liveState = null;
+      $('contentText').classList.remove('streaming');
+      $('reasoningText').classList.remove('streaming');
+    }
+
+    function appendLiveContent(text) {
+      const t = liveState;
+      if (!t) return;
+      if (t.firstAt == null) t.firstAt = performance.now();
+      t.chars += text.length;
+      t.chunks++;
+      const box = $('contentPreview');
+      box.style.display = 'block';
+      if (!box.dataset.closed) box.open = true;
+      const pre = $('contentText');
+      pre.textContent += text;
+      pre.classList.add('streaming');
+      pre.scrollTop = pre.scrollHeight;
+      $('contentLen').textContent = t.chars + ' 字';
+    }
+
+    function appendLiveReasoning(text) {
+      const t = liveState;
+      if (!t) return;
+      if (t.firstAt == null) t.firstAt = performance.now();
+      t.rchars += text.length;
+      const box = $('reasoningPreview');
+      box.style.display = 'block';
+      if (!box.dataset.closed) box.open = true;
+      const pre = $('reasoningText');
+      pre.textContent += text;
+      pre.classList.add('streaming');
+      pre.scrollTop = pre.scrollHeight;
+      $('reasoningLen').textContent = t.rchars + ' 字';
+    }
+
+    // ========== 单次测试（live 流式） ==========
+    // 返回值：成功 → { metrics, model, content, reasoning }；用户停止 → { aborted: true }；失败 → null
+    async function runSingleTest(label) {
+      const { url, apiKey, model, prompt, maxTokens, temperature, thinking } = collectParams();
+
+      if (!url || !apiKey || !model) {
+        showError('请填写 API 地址、API Key 和模型名称');
+        return null;
+      }
+      const urlErr = validateApiUrl(url);
+      if (urlErr) {
+        showError('URL 检查未通过：\n' + urlErr);
+        return null;
+      }
+
+      hideError();
+      beginLive(label);
+
+      activeAbort = new AbortController();
+      let finalMetrics = null;
+      let streamError = false;
+      let content = '';
+      let reasoning = '';
+
+      try {
+        const res = await fetch('/api/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, apiKey, model, prompt, maxTokens, temperature, thinking, live: true }),
+          signal: activeAbort.signal
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          showError(friendlyHttpError(errJson.error || `HTTP ${res.status}`));
+          restoreAfterFail();
+          return null;
+        }
+
+        // 兼容旧版服务端（尚未支持 live 模式）：此时返回的是等整包结束后的一次性 JSON，
+        // 直接当作最终结果处理，页面照常可用（只是没有实时流式展示）
+        const contentType = res.headers.get('content-type') || '';
+        if (/application\/json/i.test(contentType)) {
+          const data = await res.json();
+          if (data.error) {
+            showError(friendlyHttpError(data.error));
+            restoreAfterFail();
+            return null;
+          }
+          return { metrics: data, model, content: data.content || '', reasoning: data.reasoningContent || '' };
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            const data = trimmed.slice(5).trim();
+            if (data === '[DONE]') continue;
+
+            let json;
+            try { json = JSON.parse(data); } catch { continue; }
+
+            if (json.error) { showError(friendlyHttpError(json.error)); streamError = true; continue; }
+            if (json.__metrics__) { finalMetrics = json.__metrics__; continue; }
+
+            const delta = json.choices && json.choices[0] && json.choices[0].delta;
+            if (!delta) continue;
+            if (delta.content) { content += delta.content; appendLiveContent(delta.content); }
+            else if (delta.reasoning_content || delta.reasoning) {
+              const r = delta.reasoning_content || delta.reasoning;
+              reasoning += r;
+              appendLiveReasoning(r);
+            }
+          }
+        }
+
+        if (finalMetrics) return { metrics: finalMetrics, model, content, reasoning };
+        if (!streamError) {
+          showError('上游未返回任何有效数据：可点「诊断地址」检查接口，或确认模型名 / Key 是否正确');
+        }
+        restoreAfterFail();
+        return null;
+
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          if (stopRequested) {
+            stopRequested = false;
+            noteStopped();
+            return { aborted: true };
+          }
+          showError('请求已取消');
+          restoreAfterFail();
+          return null;
+        }
+        showError(netErrorHint(err));
+        restoreAfterFail();
+        return null;
+      } finally {
+        endLive();
+        activeAbort = null;
+      }
+    }
+
+    // 用户停止：保留半程数据，但明确标出不完整
+    function noteStopped() {
+      const foot = $('metricsFoot');
+      foot.innerHTML = '<span class="chip warn">测试已停止 —— 上方为不完整数据</span>';
+      foot.style.display = 'flex';
+      if (common && common.toast) common.toast('已停止本次测试');
+    }
+
+    // 失败回滚：有上次结果就还原上次，否则回到空状态
+    function restoreAfterFail() {
+      if (lastRun) {
+        renderFinal(lastRun.metrics, { noDelta: true });
+        fillPreviews(lastRun.content, lastRun.reasoning);
+      } else {
+        $('metricsGrid').style.display = 'none';
+        $('metricsGrid').innerHTML = '';
+        $('metricsFoot').style.display = 'none';
+        $('metricsFoot').innerHTML = '';
+        $('emptyHint').style.display = 'block';
+        $('contentPreview').style.display = 'none';
+        $('reasoningPreview').style.display = 'none';
+      }
+    }
+
+    function fillPreviews(content, reasoning) {
+      const cp = $('contentPreview');
+      const rp = $('reasoningPreview');
+      if (content) {
+        cp.style.display = 'block';
+        $('contentText').textContent = content;
+        $('contentLen').textContent = content.length + ' 字';
+      } else {
+        cp.style.display = 'none';
+      }
+      if (reasoning) {
+        rp.style.display = 'block';
+        $('reasoningText').textContent = reasoning;
+        $('reasoningLen').textContent = reasoning.length + ' 字';
+      } else {
+        rp.style.display = 'none';
+      }
+    }
+
+    // ========== 结果渲染 ==========
+    // 与上一次测试对比的增量标记（lowerBetter：数值越低越好，如延迟）
+    function deltaBadge(cur, prev, lowerBetter, unit, scale, digits) {
+      if (cur == null || prev == null || !prev || !cur) return '';
+      const d = (cur - prev) / (scale || 1);
+      if (Math.abs(d) < Math.pow(10, -(digits || 0)) / 2) return '';
+      const better = lowerBetter ? d < 0 : d > 0;
+      const arrow = d > 0 ? '↑' : '↓';
+      const num = Math.abs(d).toFixed(digits || 0);
+      return `<span class="delta ${better ? 'good' : 'bad'}" title="对比上一次测试">${arrow}${num}${unit || ''}</span>`;
+    }
+
+    function finalCard(id, label, value, unit, cls, deltaHtml) {
+      return `<div class="metric-card">
+        <div class="metric-value ${cls || ''}" id="${id}">${value}${unit ? `<span class="metric-unit">${unit}</span>` : ''}${deltaHtml || ''}</div>
+        <div class="metric-label">${label}</div>
+      </div>`;
+    }
+
+    function chip(label, value) {
+      return `<span class="chip"><i>${label}</i><b>${value}</b></span>`;
+    }
+
+    function renderFinal(m, opts) {
+      opts = opts || {};
+      $('emptyHint').style.display = 'none';
+      const grid = $('metricsGrid');
+      grid.style.display = 'grid';
+
+      const prev = (!opts.noDelta && lastRun) ? lastRun.metrics : null;
+      const thinking = m.appliedThinking && Object.keys(m.appliedThinking).length ? m.appliedThinking : null;
+
+      grid.innerHTML =
+        finalCard('mv-ttft', '首包延迟 (TTFT)',
+          m.ttft == null ? '—' : m.ttft, 'ms', ttftClass(m.ttft),
+          deltaBadge(m.ttft, prev && prev.ttft, true, 'ms', 1, 0))
+        + finalCard('mv-total', '完整耗时',
+          fmtSec(m.totalTime), 's', 'color-accent',
+          deltaBadge(m.totalTime, prev && prev.totalTime, true, 's', 1000, 2))
+        + finalCard('mv-tps', '生成速度',
+          m.tokensPerSecond || '—', 't/s', speedClass(m.tokensPerSecond),
+          deltaBadge(m.tokensPerSecond, prev && prev.tokensPerSecond, false, '', 1, 1))
+        + finalCard('mv-tokens', '输出 Tokens', m.outputTokens || '—', '', '', '')
+        + finalCard('mv-chunks', 'SSE Chunks', m.chunkCount || '—', '', '', '')
+        + finalCard('mv-firstchunk', '首 Chunk', m.firstChunk == null ? '—' : m.firstChunk, 'ms', '', '');
+
+      // 扩展指标 chips + 实际下发的思考参数
+      const chips = [];
+      if (m.inputTokens) chips.push(chip('输入 Tokens', m.inputTokens));
+      if (m.reasoningTokens) chips.push(chip('思考 Tokens', m.reasoningTokens));
+      if (m.answerTtft != null && m.reasoningTokens > 0) chips.push(chip('正文首字', m.answerTtft + 'ms'));
+      if (m.thinkingTtft != null && m.reasoningTokens > 0) chips.push(chip('思考耗时', m.thinkingTtft + 'ms'));
+      if (m.interChunkAvg != null) chips.push(chip('Chunk 间隔', m.interChunkAvg + 'ms'));
+      if (m.interChunkMax != null) chips.push(chip('抖动峰值', m.interChunkMax + 'ms'));
+      if (m.contentChars) chips.push(chip('内容字符', m.contentChars));
+
+      const foot = $('metricsFoot');
+      let footHtml = '';
+      if (thinking) {
+        footHtml += `<span class="applied-line" title="${escapeHtml(JSON.stringify(thinking))}">🧠 实际下发：<code>${escapeHtml(JSON.stringify(thinking))}</code></span>`;
+      }
+      if (m.estimated) chips.push('<span class="chip warn">⚠ 上游未回传 usage，Tokens 为估算值</span>');
+      footHtml += chips.join('');
+      foot.style.display = footHtml ? 'flex' : 'none';
+      foot.innerHTML = footHtml;
+    }
+
+    // 完成一次测试后的收尾（单次与多次共用）
+    function finalizeRun(run) {
+      renderFinal(run.metrics);
+      fillPreviews(run.content, run.reasoning);
+      addHistory(run.metrics, run.model);
+      lastRun = run;
+    }
+
+    // ========== 入口：单次 / 连续 N 次 ==========
+    async function runTest() {
+      if (running) return;
+      setRunning(true);
+      const r = await runSingleTest('');
+      if (r && !r.aborted) {
+        finalizeRun(r);
+        if (common) common.markPassed('测试通过，可存为渠道供下次直接测试');
+      }
+      setRunning(false);
+    }
+
+    async function runMultiTest(count) {
+      if (running) return;
+      setRunning(true);
+      const results = [];
+
+      for (let i = 0; i < count; i++) {
+        if (stopRequested) break;
+        const r = await runSingleTest(`第 ${i + 1}/${count} 次`);
+        if (!r || r.aborted) break;
+        results.push(r.metrics);
+        finalizeRun(r);
+        if (i < count - 1 && !stopRequested) {
+          setRunStatus(`第 ${i + 1}/${count} 次完成 · 准备下一次…`);
+          await sleep(400);
+        }
+      }
+
+      if (results.length > 1) {
+        showStats(results);
+        if (common) common.markPassed(results.length + ' 次测试均通过，可存为渠道供下次直接测试');
+      } else if (results.length === 1) {
+        if (common) common.markPassed('测试通过，可存为渠道供下次直接测试');
+      }
+      setRunning(false);
+    }
+
+    // ========== 端点诊断：自动探测常见 API 路径 ==========
+    async function runDiagnose() {
+      const url = $('apiUrl').value.trim();
+      const apiKey = $('apiKey').value.trim();
+      const model = $('modelName').value.trim();
+
+      if (!url || !apiKey || !model) {
+        showError('请先填写 API 地址、API Key 和模型名称，再进行诊断');
+        return;
+      }
+      const urlErr = validateApiUrl(url);
+      if (urlErr) {
+        showError('URL 检查未通过：\n' + urlErr);
+        return;
+      }
+
+      hideError();
+      const btn = $('diagBtn');
+      btn.disabled = true;
+      btn.textContent = '诊断中...';
+      $('progressBar').classList.add('active');
+
+      try {
+        const res = await fetch('/api/diagnose', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, apiKey, model })
+        });
+        const data = await res.json();
+        if (data.error) {
+          showError(data.error);
+          return;
+        }
+
+        const lines = data.results.map(r => {
+          const mark = r.ok ? '[可用]' : `[${r.status ?? '失败'}]`;
+          return `${mark} ${r.endpoint}  (${r.elapsed}ms)\n      ${r.snippet || '(无响应体)'}`;
+        });
+        const found = data.results.find(r => r.ok);
+        const summary = found
+          ? `找到可用端点！请把 API 地址改为：\n${found.endpoint}\n\n探测结果：\n`
+          : `所有常见路径均不可用。请核对该中转站文档里的接口地址（注意主站域名与 API 域名可能不同），或确认 Key/模型名是否有效。\n\n探测结果：\n`;
+        showError(summary + lines.join('\n'));
+      } catch (err) {
+        showError(netErrorHint(err));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '诊断地址';
+        $('progressBar').classList.remove('active');
+      }
+    }
+
+    // ========== 多次测试统计 ==========
+    function showStats(results) {
+      const grid = $('metricsGrid');
+      const ttfts = results.map(r => r.ttft).filter(Boolean);
+      const totals = results.map(r => r.totalTime).filter(Boolean);
+      const speeds = results.map(r => r.tokensPerSecond).filter(Boolean);
+
+      const avg = arr => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+      const min = arr => arr.length ? Math.round(Math.min(...arr)) : 0;
+      const max = arr => arr.length ? Math.round(Math.max(...arr)) : 0;
+
+      const statsCard = document.createElement('div');
+      statsCard.className = 'metric-card';
+      statsCard.style.gridColumn = '1 / -1';
+      statsCard.style.textAlign = 'left';
+      statsCard.style.animationDelay = '0.28s';
+      statsCard.innerHTML = `
+        <div class="metric-label" style="margin-bottom:8px;font-size:0.84rem;color:var(--text-primary)">
+          ${results.length} 次测试统计
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:0.8rem;color:var(--text-secondary)">
+          <div>
+            <div style="color:var(--text-muted);margin-bottom:4px">首包延迟</div>
+            <div>平均 <b style="color:var(--accent-light)">${avg(ttfts)}ms</b></div>
+            <div>最快 ${min(ttfts)}ms / 最慢 ${max(ttfts)}ms</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted);margin-bottom:4px">总耗时</div>
+            <div>平均 <b style="color:var(--accent-light)">${(avg(totals) / 1000).toFixed(2)}s</b></div>
+            <div>最快 ${(min(totals) / 1000).toFixed(2)}s / 最慢 ${(max(totals) / 1000).toFixed(2)}s</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted);margin-bottom:4px">生成速度</div>
+            <div>平均 <b style="color:var(--success)">${avg(speeds)} t/s</b></div>
+            <div>最快 ${max(speeds)} / 最慢 ${min(speeds)} t/s</div>
+          </div>
+        </div>
+      `;
+      grid.appendChild(statsCard);
+    }
+
+    // ========== 历史记录（localStorage 持久化） ==========
+    function loadHistory() {
+      try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        history = Array.isArray(list) ? list.filter(h => h && h.model).slice(0, 20) : [];
+      } catch (e) { history = []; }
+    }
+
+    function persistHistory() {
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { /* 忽略 */ }
+    }
+
+    function addHistory(m, model) {
+      history.unshift({
+        model,
+        ttft: m.ttft,
+        totalTime: m.totalTime,
+        tps: m.tokensPerSecond,
+        tokens: m.outputTokens,
+        ts: Date.now()
+      });
+      if (history.length > 20) history.pop();
+      persistHistory();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const body = $('historyBody');
+      $('histMeta').textContent = history.length ? `已存 ${history.length} 条 · 自动保存在本机` : '';
+      if (!history.length) {
+        body.innerHTML = '<tr><td colspan="6" class="hist-empty">暂无测试记录 —— 发起测试后自动记录在这里（最多保留 20 条，自动保存在本机）</td></tr>';
+        return;
+      }
+      const bestTps = Math.max(...history.map(h => h.tps || 0));
+      body.innerHTML = history.map(h => {
+        const best = history.length > 1 && h.tps && h.tps === bestTps;
+        const ttftCell = h.ttft == null ? '<td>—</td>'
+          : `<td class="${h.ttft < 500 ? 'c-good' : h.ttft < 1500 ? 'c-warn' : 'c-bad'}">${h.ttft}ms</td>`;
+        const tpsCell = h.tps == null ? '<td>—</td>'
+          : `<td class="${h.tps >= 50 ? 'c-good' : h.tps >= 20 ? 'c-warn' : 'c-bad'}">${h.tps} t/s${best ? ' <span class="hist-best" title="历史最快">🏆</span>' : ''}</td>`;
+        return `<tr${best ? ' class="best"' : ''}>
+          <td style="color:var(--text-primary)">${escapeHtml(h.model)}</td>
+          ${ttftCell}
+          <td>${fmtSec(h.totalTime)}s</td>
+          ${tpsCell}
+          <td>${h.tokens || '—'}</td>
+          <td class="hist-time" style="color:var(--text-muted)">${h.ts ? new Date(h.ts).toLocaleTimeString('zh-CN', { hour12: false }) : '—'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function clearHistory() {
+      if (history.length && !confirm('清空全部测试记录？')) return;
+      history = [];
+      persistHistory();
+      renderHistory();
+      if (common && common.toast) common.toast('已清空测试记录');
+    }
+
+    // ========== 错误提示 ==========
+    function showError(msg) {
+      const box = $('errorBox');
+      box.textContent = msg;
+      box.classList.add('visible');
+    }
+    function hideError() {
+      $('errorBox').classList.remove('visible');
+    }
+
+    // ========== 事件绑定 & 初始化 ==========
+    $('startBtn').addEventListener('click', () => { running ? requestStop() : runTest(); });
+    $('multiBtn').addEventListener('click', () => runMultiTest(3));
+    $('diagBtn').addEventListener('click', runDiagnose);
+    $('clearBtn').addEventListener('click', clearHistory);
+
+    // API Key 显示 / 隐藏
+    $('keyToggle').addEventListener('click', () => {
+      const input = $('apiKey');
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      $('keyToggle').classList.toggle('on', show);
+      $('keyToggle').textContent = show ? '🙈' : '👁';
+    });
+
+    // 预览折叠状态记忆：用户手动收起后，测试时不再自动展开
+    ['contentPreview', 'reasoningPreview'].forEach(id => {
+      const el = $(id);
+      el.addEventListener('toggle', () => { el.dataset.closed = el.open ? '' : '1'; });
+    });
+
+    // 快捷键 Ctrl+Enter 开始测试
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!running) runTest();
+      }
+    });
+
+    // 初始化
+    // 顺序：注入渠道/思考控件 → 恢复本地配置 → 自动套用上次渠道（渠道优先级最高）
+    common = LLMCommon.init('index', {
+      restore: () => {
+        CONFIG_FIELDS.forEach(id => {
+          const el = $(id);
+          el.addEventListener('input', saveConfig);
+          el.addEventListener('change', saveConfig);
+        });
+        loadConfig();
+      },
+      onEvent: (type) => {
+        if (type === 'config' || type === 'saved' || type === 'changed') saveConfig();
+        if (type === 'saved' || type === 'changed') refreshSuggestions();
+      }
+    });
+    renderPresets();
+    loadHistory();
+    renderHistory();
+    refreshSuggestions();
+
+    // 探测后端服务是否在线：用于区分本服务页面与静态预览（预览地址没有 /api/health）
+    fetch('/api/health', { method: 'GET', cache: 'no-store' })
+      .then(r => { if (!r.ok) throw new Error('not ok'); })
+      .catch(() => { const b = $('connBanner'); if (b) b.style.display = 'block'; });
+  </script>
+</body>
+</html>
