@@ -7,10 +7,12 @@ import { createReadStream, existsSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { spawn } from 'child_process';
 import net from 'net';
+import { SpeedHistoryStore, SPEED_HISTORY_MAX } from './speed-history.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3210;
+const speedHistory = new SpeedHistoryStore({ file: join(__dirname, 'logs', 'speed-history.json') });
 
 /**
  * 阿里云百炼的 OpenAI 兼容前缀是 /compatible-mode/v1，而不是通用的 /v1。
@@ -343,7 +345,53 @@ app.use(express.static(join(__dirname, 'public'), { maxAge: '1h' }));
  * features 用于前端探测服务端能力（旧版没有该字段，据此提示用户重启）。
  */
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, name: 'llm-speed-test', features: ['test', 'chat', 'tts', 'pipeline', 'asr', 'logs', 'vad'], time: Date.now() });
+  res.json({ ok: true, name: 'llm-speed-test', features: ['test', 'chat', 'tts', 'pipeline', 'asr', 'logs', 'vad', 'speed-history'], time: Date.now() });
+});
+
+/**
+ * GET /api/speed-history
+ * 测速历史：服务端文件持久化，最多返回 SPEED_HISTORY_MAX 条。
+ */
+app.get('/api/speed-history', async (req, res) => {
+  try {
+    const records = await speedHistory.list();
+    res.json({ ok: true, records, total: records.length, max: SPEED_HISTORY_MAX });
+  } catch (err) {
+    res.status(500).json({ error: `读取测试记录失败：${err.message || err}` });
+  }
+});
+
+/**
+ * DELETE /api/speed-history
+ * 清空全部测速历史。
+ */
+app.delete('/api/speed-history', async (req, res) => {
+  try {
+    const result = await speedHistory.clear();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: `清空测试记录失败：${err.message || err}` });
+  }
+});
+
+/**
+ * POST /api/speed-history/import
+ * 迁移旧版 localStorage 记录；按 id 与 ts+model+ttft+totalTime 去重。
+ */
+app.post('/api/speed-history/import', async (req, res) => {
+  const records = req.body && req.body.records;
+  if (!Array.isArray(records)) {
+    return res.status(400).json({ error: 'records 必须是数组' });
+  }
+  if (records.length > SPEED_HISTORY_MAX) {
+    return res.status(400).json({ error: `一次最多导入 ${SPEED_HISTORY_MAX} 条` });
+  }
+  try {
+    const result = await speedHistory.importRecords(records);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: `导入测试记录失败：${err.message || err}` });
+  }
 });
 
 /**
@@ -431,7 +479,7 @@ app.post('/api/diagnose', async (req, res) => {
  * live 不传/为 false：等整个流结束后一次性返回 JSON（兼容脚本与旧版前端）
  */
 app.post('/api/test', async (req, res) => {
-  const { url, apiKey, model, prompt, maxTokens = 512, temperature = 0.7, thinking, live } = req.body;
+  const { url, apiKey, model, prompt, maxTokens = 512, temperature = 0.7, thinking, live, channelId, channelName } = req.body;
 
   if (!url || !apiKey || !model) {
     return res.status(400).json({ error: '缺少必填参数: url, apiKey, model' });
@@ -457,7 +505,8 @@ app.post('/api/test', async (req, res) => {
       apiKey,
       body,
       timeoutSec: 120,
-      extraMetrics: { appliedThinking: thinkingParams }
+      extraMetrics: { appliedThinking: thinkingParams },
+      historyMeta: { model, url, endpoint, channelId, channelName }
     });
   }
 
@@ -509,6 +558,7 @@ app.post('/api/test', async (req, res) => {
     const decoder = new TextDecoder();
     let buffer = '';
     let sawData = false;   // 是否解析到过有效的 OpenAI 流式 JSON
+    let upstreamError = null; // 上游在 200 响应中返回的 error 载荷
     let rawSample = '';    // 上游原始响应开头片段（用于诊断非标准响应）
     // 计时基准用请求发出前的 startTime（见 StreamMetrics 注释：不能用默认的"当前时刻"）
     const collector = new StreamMetrics(startTime);
@@ -532,6 +582,12 @@ app.post('/api/test', async (req, res) => {
 
         try {
           const json = JSON.parse(data);
+          if (json && json.error) {
+            upstreamError = typeof json.error === 'string'
+              ? json.error
+              : (json.error.message || JSON.stringify(json.error));
+            continue;
+          }
           sawData = true;
           collector.noteLine(collector.lineCount === 0);
           collector.ingest(json);
@@ -554,7 +610,9 @@ app.post('/api/test', async (req, res) => {
     // 读完了整个流却没解析到任何有效数据：说明上游不是 OpenAI 兼容的流式响应，
     // 显式报错并附上原始响应片段，避免"无报错也无返回"的静默失败
     if (!sawData) {
-      metrics.error = upstreamNotStreamError(response, rawSample);
+      metrics.error = upstreamError
+        ? `上游返回错误：${String(upstreamError).slice(0, 500)}`
+        : upstreamNotStreamError(response, rawSample);
       metrics.totalTime = Math.round(performance.now() - startTime);
       return res.json(metrics);
     }
@@ -562,6 +620,9 @@ app.post('/api/test', async (req, res) => {
     // 汇总采集器结果到响应（口径与 /api/chat 完全一致）
     Object.assign(metrics, collector.finalize());
     metrics.firstChunkTime = metrics.firstChunk; // 兼容旧字段名
+    if (upstreamError) {
+      metrics.error = `上游返回错误：${String(upstreamError).slice(0, 500)}`;
+    }
 
     // 截断内容，避免返回过大
     if (metrics.content.length > 2000) {
@@ -569,6 +630,16 @@ app.post('/api/test', async (req, res) => {
     }
     if (metrics.reasoningContent.length > 4000) {
       metrics.reasoningContent = metrics.reasoningContent.slice(0, 4000) + '...[截断]';
+    }
+
+    if (!metrics.error) {
+      try {
+        metrics.historyRecord = await speedHistory.record({
+          model, url, endpoint, channelId, channelName, metrics
+        });
+      } catch (err) {
+        console.error('[speed-history] 记录失败:', err && err.message ? err.message : err);
+      }
     }
 
     res.json(metrics);
@@ -774,10 +845,11 @@ class StreamMetrics {
  *   apiKey: string,
  *   body: object,            // 请求上游的完整请求体
  *   timeoutSec?: number,     // 上游超时（默认 180s）
- *   extraMetrics?: object    // 额外合并进 __metrics__ 的字段（如 appliedThinking）
+ *   extraMetrics?: object,   // 额外合并进 __metrics__ 的字段（如 appliedThinking）
+ *   historyMeta?: object     // 传了才写入测速历史（/api/chat 不传）
  * }} opts
  */
-async function proxyChatStream(req, res, { endpoint, apiKey, body, timeoutSec = 180, extraMetrics }) {
+async function proxyChatStream(req, res, { endpoint, apiKey, body, timeoutSec = 180, extraMetrics, historyMeta }) {
   // 计时基准必须在发起上游请求之前取（原因见 StreamMetrics 构造函数注释）
   const t0 = performance.now();
 
@@ -820,6 +892,7 @@ async function proxyChatStream(req, res, { endpoint, apiKey, body, timeoutSec = 
     const decoder = new TextDecoder();
     let buffer = '';
     let sawData = false;   // 是否解析到过有效的 OpenAI 流式 JSON
+    let upstreamError = null; // 上游在 200 响应中返回的 error 载荷
     let rawSample = '';    // 上游原始响应开头片段（用于诊断非标准响应）
     // 计时基准用请求发出前的 t0（见 StreamMetrics 注释：不能用默认的"当前时刻"）
     const metrics = new StreamMetrics(t0);
@@ -842,7 +915,11 @@ async function proxyChatStream(req, res, { endpoint, apiKey, body, timeoutSec = 
         if (trimmed.slice(5).trim() === '[DONE]') continue;
         try {
           const payload = JSON.parse(trimmed.slice(5).trim());
-          if (payload && typeof payload === 'object' && !payload.error) {
+          if (payload && typeof payload === 'object' && payload.error) {
+            upstreamError = typeof payload.error === 'string'
+              ? payload.error
+              : (payload.error.message || JSON.stringify(payload.error));
+          } else if (payload && typeof payload === 'object') {
             sawData = true;
             metrics.noteLine(metrics.lineCount === 0);
             metrics.ingest(payload);
@@ -863,6 +940,13 @@ async function proxyChatStream(req, res, { endpoint, apiKey, body, timeoutSec = 
       // 透传结束后回传本轮速度指标（前端据此渲染性能面板）
       const finalMetrics = metrics.finalize();
       if (extraMetrics && Object.keys(extraMetrics).length) Object.assign(finalMetrics, extraMetrics);
+      if (historyMeta && !upstreamError) {
+        try {
+          finalMetrics.historyRecord = await speedHistory.record({ ...historyMeta, metrics: finalMetrics });
+        } catch (err) {
+          console.error('[speed-history] 记录失败:', err && err.message ? err.message : err);
+        }
+      }
       res.write(`data: ${JSON.stringify({ __metrics__: finalMetrics })}\n\n`);
     }
 

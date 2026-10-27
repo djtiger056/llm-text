@@ -157,44 +157,6 @@
     }
     .config-card { display: flex; flex-direction: column; gap: 9px; }
 
-    /* 预设按钮 */
-    .presets-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .presets-label {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .presets {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      min-width: 0;
-    }
-    .preset-btn {
-      padding: 4px 10px;
-      border-radius: 20px;
-      border: 1px solid var(--glass-border);
-      background: var(--glass-bg);
-      color: var(--text-secondary);
-      font-size: 0.74rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      backdrop-filter: blur(10px);
-      white-space: nowrap;
-    }
-    .preset-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent-light);
-      background: rgba(99, 102, 241, 0.08);
-      box-shadow: 0 0 12px var(--accent-glow);
-    }
-    .preset-btn.active {
-      border-color: var(--accent);
-      color: #fff;
-      background: rgba(99, 102, 241, 0.15);
-    }
-
     /* ========== 表单：24 列细网格，两行放完所有测试参数 ==========
        行1：API 地址 / API Key / 模型名称（Key 与模型拿到 30% 左右宽度，不再被挤掉）
        行2：测试 Prompt / Max Tokens / Temperature + 思考控制（shared.js 注入的
@@ -704,6 +666,159 @@
       padding: 16px 0;
       letter-spacing: 0.01em;
     }
+    .hist-open-btn {
+      margin-left: auto;
+      border: 1px solid var(--glass-border);
+      background: rgba(99, 102, 241, 0.12);
+      color: var(--accent-light);
+      border-radius: 999px;
+      padding: 3px 12px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+    .hist-open-btn:hover { background: rgba(99, 102, 241, 0.22); border-color: var(--accent); }
+    .history-table td.hist-channel { font-family: inherit; max-width: 180px; }
+    .hist-channel-name {
+      display: inline-block;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: bottom;
+    }
+    .hist-retry { color: var(--accent-light); cursor: pointer; text-decoration: underline; }
+
+    /* 全量历史弹层 */
+    .hist-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+    }
+    .hist-modal[hidden] { display: none; }
+    .hist-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 18, 0.72);
+      backdrop-filter: blur(5px);
+    }
+    .hist-dialog {
+      position: relative;
+      width: min(1180px, 100%);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      background: #0d1220;
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      box-shadow: 0 28px 90px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+    }
+    .hist-modal-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px 18px 10px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .hist-modal-head h2 { font-size: 1rem; font-weight: 600; }
+    .hist-modal-head p { margin-top: 3px; font-size: 0.72rem; color: var(--text-muted); }
+    .hist-close {
+      margin-left: auto;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .hist-close:hover { color: var(--text-primary); background: var(--glass-hover); }
+    .hist-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .hist-toolbar select,
+    .hist-toolbar input {
+      height: 32px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border);
+      background: rgba(17, 24, 39, 0.9);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.76rem;
+      padding: 0 10px;
+      outline: none;
+    }
+    .hist-toolbar select { min-width: 130px; }
+    .hist-toolbar input { flex: 1 1 220px; min-width: 180px; }
+    .hist-toolbar select:focus,
+    .hist-toolbar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .hist-view-toggle { display: flex; gap: 4px; margin-left: auto; }
+    .hist-view-toggle button {
+      height: 32px;
+      padding: 0 11px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.74rem;
+      cursor: pointer;
+    }
+    .hist-view-toggle button.on {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.2);
+      color: var(--accent-light);
+    }
+    .hist-modal-body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+    .hist-modal-body::-webkit-scrollbar { width: 7px; height: 7px; }
+    .hist-modal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 4px; }
+    .hist-modal-table { min-width: 900px; }
+    .hist-modal-table th { position: sticky; top: 0; z-index: 2; background: #0d1220; }
+    .hist-group-row td {
+      background: rgba(99, 102, 241, 0.08);
+      color: var(--accent-light);
+      font-family: inherit;
+      font-size: 0.74rem;
+      padding: 8px 10px;
+      border-top: 1px solid rgba(99, 102, 241, 0.16);
+    }
+    .hist-group-stats { color: var(--text-secondary); margin-left: 6px; }
+    .hist-group-sub { color: var(--text-muted); margin-left: 6px; }
+    .hist-modal-foot {
+      padding: 8px 18px;
+      border-top: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    body.hist-modal-open { overflow: hidden; }
+    @media (max-width: 768px) {
+      .hist-modal { padding: 0; }
+      .hist-dialog { width: 100%; height: 100vh; max-height: 100vh; border-radius: 0; border: 0; }
+      .hist-toolbar { padding: 10px 12px; }
+      .hist-view-toggle { margin-left: 0; width: 100%; }
+      .hist-view-toggle button { flex: 1; }
+      .hist-modal-head, .hist-modal-foot { padding-left: 12px; padding-right: 12px; }
+    }
 
     /* 进度条 */
     .progress-bar {
@@ -819,32 +934,59 @@
     }
     .sc-field-block { margin-top: 0; min-width: 0; }
     .sc-field { min-width: 0; }
-    /* 渠道气泡：整块压成一行 —— 标签 | 气泡(满时横向滚动) | 名称输入 | 覆盖 | 保存 */
+    /* 渠道区：第一行控制项，下面两排气泡自动换行；
+       超过两行在内部纵向滚动，不再把配置卡往下撑 */
     .chan-bar {
-      display: flex;
+      display: grid;
+      grid-template-columns: auto minmax(180px, 1fr) auto auto;
+      grid-template-areas:
+        "label name overwrite save"
+        "bubbles bubbles bubbles bubbles";
       align-items: center;
-      flex-wrap: wrap;
       gap: 8px;
     }
     .chan-bar > .sc-hint { display: none; }
     .chan-head, .chan-row.chan-edit { display: contents; }
-    .chan-head .sc-label { order: 0; white-space: nowrap; flex-shrink: 0; }
-    .chan-head .sc-btn, .chan-edit .sc-btn { flex-shrink: 0; }
-    .chan-bubbles { order: 1; }
-    #channelName { order: 2; width: 170px; flex: 0 0 auto; }
-    .chan-edit .sc-btn { order: 3; }
-    .chan-head .sc-btn { order: 4; }
+    .chan-head .sc-label { grid-area: label; margin: 0; white-space: nowrap; }
+    #channelName { grid-area: name; width: 100%; }
+    .chan-edit .sc-btn { grid-area: overwrite; justify-self: start; }
+    .chan-head .sc-btn { grid-area: save; }
     .chan-bubbles {
+      grid-area: bubbles;
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
+      align-content: flex-start;
       gap: 6px;
-      flex: 1 1 260px;
       min-width: 0;
-      overflow-x: auto;
-      padding: 2px 0;
+      max-height: 66px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 2px 6px 2px 0;
+      user-select: none;
+      -webkit-user-select: none;
+      overscroll-behavior-y: contain;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
     }
-    .chan-bubbles::-webkit-scrollbar { height: 5px; }
-    .chan-bubbles::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+    /* 内容超出两行时可拖动：抓手光标 */
+    .chan-bubbles.is-scrollable { cursor: grab; }
+    .chan-bubbles.is-scrollable .chan-bubble { cursor: grab; }
+    .chan-bubbles.is-scrollable .chan-del { cursor: pointer; }
+    .chan-bubbles.is-dragging,
+    .chan-bubbles.is-dragging .chan-bubble,
+    .chan-bubbles.is-dragging .chan-del { cursor: grabbing; }
+    .chan-bubbles::-webkit-scrollbar { width: 8px; height: 10px; }
+    .chan-bubbles::-webkit-scrollbar-track { background: transparent; }
+    .chan-bubbles::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 5px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    .chan-bubbles:hover::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.34);
+      background-clip: padding-box;
+    }
     .chan-empty {
       font-size: 0.74rem;
       color: var(--text-muted);
@@ -855,6 +997,7 @@
       display: inline-flex;
       align-items: center;
       gap: 7px;
+      height: 28px;
       max-width: 260px;
       padding: 5px 8px 5px 12px;
       border-radius: 20px;
@@ -984,9 +1127,6 @@
     .sc-toast.err { border-color: rgba(248, 113, 113, 0.5); color: #fecaca; }
 
     /* ========== 响应式 ========== */
-    @media (max-width: 1360px) {
-      .presets-label { display: none; }
-    }
     /* 思考控件不再挤在同一行：给它独占一行的空间 */
     @media (max-width: 1240px) {
       .f-prompt { grid-column: span 14; }
@@ -1008,6 +1148,14 @@
       .history-section { flex: 0 0 auto; min-height: 160px; }
       .f-url, .f-key, .f-model, .f-prompt, .f-num { grid-column: 1 / -1; }
       #thinkingSlot .think-grid > .sc-field { grid-column: 1 / -1; }
+      .chan-bar {
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+          "label label"
+          "name name"
+          "overwrite save"
+          "bubbles bubbles";
+      }
       .run-status { max-width: 100%; }
       .kbd-hint { display: none; }
     }
@@ -1035,14 +1183,9 @@
       </nav>
     </div>
 
-    <!-- 配置卡：渠道 / 预设 / 表单（两行放完所有参数）/ 操作，一屏放完 -->
+    <!-- 配置卡：渠道 / 表单（两行放完所有参数）/ 操作，一屏放完 -->
     <div class="glass-card config-card">
       <div id="channelBarSlot"></div>
-
-      <div class="presets-row">
-        <span class="presets-label">快捷预设</span>
-        <div class="presets" id="presets"></div>
-      </div>
 
       <div class="form-grid">
         <!-- 行1：接口信息 -->
@@ -1124,12 +1267,13 @@
 
     <!-- 历史记录：吃掉剩余高度，行多时表格内部滚动 -->
     <div class="history-section glass-card" id="historySection">
-      <h3>测试记录 <span class="hist-meta" id="histMeta"></span></h3>
+      <h3>测试记录 <span class="hist-meta" id="histMeta"></span><button class="hist-open-btn" id="histOpenBtn">查看全部</button></h3>
       <div class="table-wrap">
         <table class="history-table">
           <thead>
             <tr>
               <th>模型</th>
+              <th>渠道</th>
               <th>首包延迟</th>
               <th>总耗时</th>
               <th>速度</th>
@@ -1143,6 +1287,37 @@
     </div>
   </div>
 
+  <!-- 全量测速历史弹层 -->
+  <div class="hist-modal" id="histModal" hidden>
+    <div class="hist-backdrop" data-hist-close></div>
+    <div class="hist-dialog" role="dialog" aria-modal="true" aria-labelledby="histModalTitle">
+      <header class="hist-modal-head">
+        <div>
+          <h2 id="histModalTitle">全部测试记录</h2>
+          <p id="histModalMeta"></p>
+        </div>
+        <button class="hist-close" data-hist-close aria-label="关闭">×</button>
+      </header>
+      <div class="hist-toolbar">
+        <select id="histChannelFilter" aria-label="按渠道筛选"></select>
+        <select id="histRangeFilter" aria-label="按时间筛选">
+          <option value="all">全部时间</option>
+          <option value="today">今天</option>
+          <option value="7d">近 7 天</option>
+          <option value="30d">近 30 天</option>
+        </select>
+        <input id="histSearch" type="search" placeholder="搜索模型 / 渠道 / URL" autocomplete="off">
+        <div class="hist-view-toggle" id="histViewToggle">
+          <button type="button" data-hist-view="time" class="on">按时间</button>
+          <button type="button" data-hist-view="channel">按渠道</button>
+          <button type="button" data-hist-view="flat">平铺</button>
+        </div>
+      </div>
+      <div class="hist-modal-body" id="histModalBody"></div>
+      <footer class="hist-modal-foot" id="histModalFoot"></footer>
+    </div>
+  </div>
+
   <!-- 浮层放容器外：fixed 元素不能处于带 backdrop-filter 的卡片里，否则定位基准会错 -->
   <div id="saveSlot"></div>
   <div class="error-box" id="errorBox" title="点击关闭" onclick="hideError()"></div>
@@ -1151,7 +1326,7 @@
   <script>
     'use strict';
 
-    // ========== 国内模型预设 ==========
+    // ========== 模型建议（输入联想用，不再渲染预设按钮） ==========
     const PRESETS = [
       { name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' },
       { name: 'DeepSeek-R1', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-reasoner' },
@@ -1170,9 +1345,19 @@
     const $ = id => document.getElementById(id);
     const PLAY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
     const STOP_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
-    const HISTORY_KEY = 'llm-speed-history-v1';
+    const LEGACY_HISTORY_KEY = 'llm-speed-history-v1';
+    const HISTORY_MIGRATED_KEY = 'llm-speed-history-migrated-v1';
+    const HISTORY_MAX = 1000;
+    const HISTORY_INLINE_MAX = 20;
 
-    let history = [];          // 测试记录（持久化到 localStorage）
+    let history = [];          // 服务端测速记录（内存副本）
+    let historyLoading = false;
+    let historyError = '';
+    let historyModalOpen = false;
+    let historyLastFocus = null;
+    let historyRefreshTimer = null;
+    const historyView = { channel: 'all', range: 'all', q: '', mode: 'time' };
+
     let lastRun = null;        // 上一次完整结果 { metrics, model, content, reasoning }
     let running = false;       // 是否有测试正在跑
     let stopRequested = false; // 用户点了停止
@@ -1266,24 +1451,6 @@
       } catch (e) { /* 渠道不可读时只用预设 */ }
       $('modelOptions').innerHTML = [...models].map(m => `<option value="${escapeHtml(m)}"></option>`).join('');
       $('urlOptions').innerHTML = [...urls].map(u => `<option value="${escapeHtml(u)}"></option>`).join('');
-    }
-
-    // ========== 预设 ==========
-    function renderPresets() {
-      const container = $('presets');
-      container.innerHTML = PRESETS.map((p, i) =>
-        `<button class="preset-btn" onclick="applyPreset(${i})" title="${p.url}">${p.name}</button>`
-      ).join('');
-    }
-
-    function applyPreset(index) {
-      const p = PRESETS[index];
-      $('apiUrl').value = p.url;
-      $('modelName').value = p.model;
-      saveConfig();
-      document.querySelectorAll('.preset-btn').forEach((btn, i) => {
-        btn.classList.toggle('active', i === index);
-      });
     }
 
     // ========== 参数收集 ==========
@@ -1454,6 +1621,10 @@
         return null;
       }
 
+      const channelInfo = (LLMCommon && typeof LLMCommon.resolveChannel === 'function')
+        ? LLMCommon.resolveChannel(url, model, apiKey)
+        : { id: '', name: url };
+
       hideError();
       beginLive(label);
 
@@ -1467,7 +1638,11 @@
         const res = await fetch('/api/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, apiKey, model, prompt, maxTokens, temperature, thinking, live: true }),
+          body: JSON.stringify({
+            url, apiKey, model, prompt, maxTokens, temperature, thinking, live: true,
+            channelId: channelInfo.id,
+            channelName: channelInfo.name
+          }),
           signal: activeAbort.signal
         });
 
@@ -1666,7 +1841,7 @@
     function finalizeRun(run) {
       renderFinal(run.metrics);
       fillPreviews(run.content, run.reasoning);
-      addHistory(run.metrics, run.model);
+      addHistory(run.metrics);
       lastRun = run;
     }
 
@@ -1801,64 +1976,363 @@
       grid.appendChild(statsCard);
     }
 
-    // ========== 历史记录（localStorage 持久化） ==========
-    function loadHistory() {
-      try {
-        const raw = localStorage.getItem(HISTORY_KEY);
-        const list = raw ? JSON.parse(raw) : [];
-        history = Array.isArray(list) ? list.filter(h => h && h.model).slice(0, 20) : [];
-      } catch (e) { history = []; }
+    // ========== 测速历史（服务端文件持久化 + 全量弹层） ==========
+    function fmtShortDate(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      const p = n => String(n).padStart(2, '0');
+      return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     }
 
-    function persistHistory() {
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { /* 忽略 */ }
+    function fmtFullDate(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     }
 
-    function addHistory(m, model) {
-      history.unshift({
-        model,
-        ttft: m.ttft,
-        totalTime: m.totalTime,
-        tps: m.tokensPerSecond,
-        tokens: m.outputTokens,
-        ts: Date.now()
-      });
-      if (history.length > 20) history.pop();
-      persistHistory();
+    function dayKey(ts) {
+      const d = new Date(ts);
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    }
+
+    function channelNameOf(r) { return (r && r.channelName) ? r.channelName : '未记录'; }
+    function numOrNull(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+    function avgOf(values) { return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null; }
+    function fmtTps(v) { return v == null ? '—' : (Number.isInteger(v) ? String(v) : v.toFixed(1)); }
+    function classForTps(v) { return v == null ? '' : v >= 50 ? 'c-good' : v >= 20 ? 'c-warn' : 'c-bad'; }
+    function classForTtft(v) { return v == null ? '' : v < 500 ? 'c-good' : v < 1500 ? 'c-warn' : 'c-bad'; }
+
+    async function fetchHistory() {
+      historyLoading = true;
+      historyError = '';
       renderHistory();
+      if (historyModalOpen) renderHistoryModal();
+      let ok = false;
+      try {
+        const res = await fetch('/api/speed-history', { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data || data.ok !== true || !Array.isArray(data.records)) throw new Error('返回格式不正确');
+        history = data.records.filter(h => h && h.model).slice(0, HISTORY_MAX);
+        ok = true;
+      } catch (err) {
+        historyError = (err && err.message) ? err.message : '读取失败';
+      } finally {
+        historyLoading = false;
+        renderHistory();
+        if (historyModalOpen) {
+          refreshHistoryChannelOptions();
+          renderHistoryModal();
+        }
+      }
+      return ok;
+    }
+
+    function refreshHistorySoon() {
+      clearTimeout(historyRefreshTimer);
+      historyRefreshTimer = setTimeout(() => { fetchHistory(); }, 300);
+    }
+
+    function addHistory(m) {
+      const rec = m && m.historyRecord;
+      if (rec && rec.id) {
+        history = [rec, ...history.filter(h => h.id !== rec.id)].slice(0, HISTORY_MAX);
+        historyError = '';
+        renderHistory();
+        if (historyModalOpen) {
+          refreshHistoryChannelOptions();
+          renderHistoryModal();
+        }
+        return;
+      }
+      // 兼容未返回 historyRecord 的旧服务端：稍后从服务端重新拉取
+      refreshHistorySoon();
     }
 
     function renderHistory() {
       const body = $('historyBody');
-      $('histMeta').textContent = history.length ? `已存 ${history.length} 条 · 自动保存在本机` : '';
-      if (!history.length) {
-        body.innerHTML = '<tr><td colspan="6" class="hist-empty">暂无测试记录 —— 发起测试后自动记录在这里（最多保留 20 条，自动保存在本机）</td></tr>';
+      const meta = $('histMeta');
+      if (historyLoading && !history.length) meta.textContent = '加载中…';
+      else if (historyError) meta.textContent = '读取失败';
+      else meta.textContent = history.length
+        ? `共 ${history.length} 条 · 服务端保存 · 最多 ${HISTORY_MAX} 条`
+        : `服务端保存 · 最多 ${HISTORY_MAX} 条`;
+
+      if (historyLoading && !history.length) {
+        body.innerHTML = '<tr><td colspan="7" class="hist-empty">正在读取测试记录…</td></tr>';
         return;
       }
-      const bestTps = Math.max(...history.map(h => h.tps || 0));
-      body.innerHTML = history.map(h => {
-        const best = history.length > 1 && h.tps && h.tps === bestTps;
-        const ttftCell = h.ttft == null ? '<td>—</td>'
-          : `<td class="${h.ttft < 500 ? 'c-good' : h.ttft < 1500 ? 'c-warn' : 'c-bad'}">${h.ttft}ms</td>`;
-        const tpsCell = h.tps == null ? '<td>—</td>'
-          : `<td class="${h.tps >= 50 ? 'c-good' : h.tps >= 20 ? 'c-warn' : 'c-bad'}">${h.tps} t/s${best ? ' <span class="hist-best" title="历史最快">🏆</span>' : ''}</td>`;
+      if (historyError && !history.length) {
+        body.innerHTML = `<tr><td colspan="7" class="hist-empty">历史记录读取失败：${escapeHtml(historyError)} · <span class="hist-retry" id="histRetry">点击重试</span></td></tr>`;
+        return;
+      }
+      if (!history.length) {
+        body.innerHTML = '<tr><td colspan="7" class="hist-empty">暂无测试记录 —— 发起测试后自动记录在这里</td></tr>';
+        return;
+      }
+
+      const bestTps = history.reduce((best, h) => {
+        const v = numOrNull(h.tps);
+        return v != null && v > best ? v : best;
+      }, -Infinity);
+
+      body.innerHTML = history.slice(0, HISTORY_INLINE_MAX).map(h => {
+        const ttft = numOrNull(h.ttft);
+        const tps = numOrNull(h.tps);
+        const total = numOrNull(h.totalTime);
+        const best = tps != null && tps === bestTps;
+        const ttftCell = ttft == null ? '<td>—</td>'
+          : `<td class="${classForTtft(ttft)}">${Math.round(ttft)}ms</td>`;
+        const tpsCell = tps == null ? '<td>—</td>'
+          : `<td class="${classForTps(tps)}">${fmtTps(tps)} t/s${best ? ' <span class="hist-best" title="历史最快">🏆</span>' : ''}</td>`;
         return `<tr${best ? ' class="best"' : ''}>
           <td style="color:var(--text-primary)">${escapeHtml(h.model)}</td>
+          <td class="hist-channel" title="${escapeHtml(h.url || '')}"><span class="hist-channel-name">${escapeHtml(channelNameOf(h))}</span></td>
           ${ttftCell}
-          <td>${fmtSec(h.totalTime)}s</td>
+          <td>${total == null ? '—' : fmtSec(total) + 's'}</td>
           ${tpsCell}
-          <td>${h.tokens || '—'}</td>
-          <td class="hist-time" style="color:var(--text-muted)">${h.ts ? new Date(h.ts).toLocaleTimeString('zh-CN', { hour12: false }) : '—'}</td>
+          <td>${h.tokens == null ? '—' : h.tokens}</td>
+          <td class="hist-time" style="color:var(--text-muted)">${fmtShortDate(h.ts)}</td>
         </tr>`;
       }).join('');
     }
 
-    function clearHistory() {
-      if (history.length && !confirm('清空全部测试记录？')) return;
-      history = [];
-      persistHistory();
-      renderHistory();
-      if (common && common.toast) common.toast('已清空测试记录');
+    async function migrateLegacyHistory() {
+      try {
+        if (localStorage.getItem(HISTORY_MIGRATED_KEY)) return 0;
+        const raw = localStorage.getItem(LEGACY_HISTORY_KEY);
+        if (!raw) {
+          localStorage.setItem(HISTORY_MIGRATED_KEY, '1');
+          return 0;
+        }
+        let list;
+        try { list = JSON.parse(raw); } catch { list = null; }
+        if (!Array.isArray(list) || !list.length) {
+          localStorage.setItem(HISTORY_MIGRATED_KEY, '1');
+          return 0;
+        }
+        const records = list.filter(h => h && h.model).slice(0, HISTORY_MAX).map(h => ({
+          ts: h.ts,
+          model: h.model,
+          ttft: h.ttft,
+          totalTime: h.totalTime,
+          tps: h.tps,
+          tokens: h.tokens,
+          channelId: '',
+          channelName: '未记录',
+          url: '',
+          endpoint: ''
+        }));
+        if (!records.length) {
+          localStorage.setItem(HISTORY_MIGRATED_KEY, '1');
+          return 0;
+        }
+        const res = await fetch('/api/speed-history/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return 0;
+        localStorage.removeItem(LEGACY_HISTORY_KEY);
+        localStorage.setItem(HISTORY_MIGRATED_KEY, '1');
+        return data.imported || 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    async function initHistory() {
+      const ok = await fetchHistory();
+      if (!ok) return;
+      try {
+        const imported = await migrateLegacyHistory();
+        if (imported) await fetchHistory();
+      } catch (e) { /* 迁移失败时保留旧数据，下次打开重试 */ }
+    }
+
+    function historyRangeStart(range) {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      if (range === 'today') return today;
+      if (range === '7d') return today - 6 * 86400000;
+      if (range === '30d') return today - 29 * 86400000;
+      return 0;
+    }
+
+    function filterHistory() {
+      const start = historyRangeStart(historyView.range);
+      const q = historyView.q.trim().toLowerCase();
+      return history.filter(r => {
+        if (start && Number(r.ts) < start) return false;
+        if (historyView.channel !== 'all' && channelNameOf(r) !== historyView.channel) return false;
+        if (q) {
+          const hay = `${r.model || ''}\n${channelNameOf(r)}\n${r.url || ''}\n${r.endpoint || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    }
+
+    function groupHistory(list) {
+      if (historyView.mode === 'flat') return [{ key: '', records: list }];
+      const map = new Map();
+      list.forEach(r => {
+        const key = historyView.mode === 'time' ? dayKey(r.ts) : channelNameOf(r);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(r);
+      });
+      const groups = [...map.entries()].map(([key, records]) => ({ key, records }));
+      if (historyView.mode === 'time') {
+        groups.sort((a, b) => b.key.localeCompare(a.key));
+      } else {
+        groups.sort((a, b) => Math.max(...b.records.map(r => r.ts || 0)) - Math.max(...a.records.map(r => r.ts || 0)));
+      }
+      return groups;
+    }
+
+    function historyGroupStats(records) {
+      const tps = records.map(r => numOrNull(r.tps)).filter(v => v != null);
+      const ttft = records.map(r => numOrNull(r.ttft)).filter(v => v != null);
+      return {
+        count: records.length,
+        avgTps: avgOf(tps),
+        bestTps: tps.length ? Math.max(...tps) : null,
+        avgTtft: avgOf(ttft),
+        lastTs: records.reduce((m, r) => Math.max(m, r.ts || 0), 0)
+      };
+    }
+
+    function historyRowHtml(r) {
+      const ttft = numOrNull(r.ttft);
+      const tps = numOrNull(r.tps);
+      const total = numOrNull(r.totalTime);
+      return `<tr>
+        <td class="hist-time" style="color:var(--text-muted)">${fmtFullDate(r.ts)}</td>
+        <td class="hist-channel" title="${escapeHtml(r.url || '')}"><span class="hist-channel-name">${escapeHtml(channelNameOf(r))}</span></td>
+        <td style="color:var(--text-primary)">${escapeHtml(r.model)}</td>
+        <td class="${classForTtft(ttft)}">${ttft == null ? '—' : Math.round(ttft) + 'ms'}</td>
+        <td>${total == null ? '—' : fmtSec(total) + 's'}</td>
+        <td class="${classForTps(tps)}">${fmtTps(tps)} t/s</td>
+        <td>${r.tokens == null ? '—' : r.tokens}</td>
+      </tr>`;
+    }
+
+    function refreshHistoryChannelOptions() {
+      const sel = $('histChannelFilter');
+      if (!sel) return;
+      const counts = new Map();
+      history.forEach(r => {
+        const name = channelNameOf(r);
+        counts.set(name, (counts.get(name) || 0) + 1);
+      });
+      const entries = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'));
+      const current = historyView.channel;
+      sel.innerHTML = '<option value="all">全部渠道</option>' + entries.map(([name, count]) =>
+        `<option value="${escapeHtml(name)}">${escapeHtml(name)}（${count}）</option>`
+      ).join('');
+      if (current !== 'all' && entries.some(([name]) => name === current)) {
+        sel.value = current;
+      } else {
+        sel.value = 'all';
+        historyView.channel = 'all';
+      }
+    }
+
+    function renderHistoryModal() {
+      if (!historyModalOpen) return;
+      const list = filterHistory();
+      const groups = groupHistory(list);
+      const body = $('histModalBody');
+      const foot = $('histModalFoot');
+      $('histModalMeta').textContent = `共 ${history.length} 条 · 筛选后 ${list.length} 条 · 最多保留 ${HISTORY_MAX} 条`;
+
+      if (historyLoading && !history.length) {
+        body.innerHTML = '<div class="hist-empty">正在读取测试记录…</div>';
+        foot.textContent = '';
+        return;
+      }
+      if (historyError && !history.length) {
+        body.innerHTML = `<div class="hist-empty">历史记录读取失败：${escapeHtml(historyError)} · <span class="hist-retry" data-hist-retry>点击重试</span></div>`;
+        foot.textContent = '';
+        return;
+      }
+      if (!list.length) {
+        body.innerHTML = '<div class="hist-empty">没有符合条件的记录</div>';
+        foot.textContent = `显示 0 / 共 ${history.length} 条 · 最多保留 ${HISTORY_MAX} 条`;
+        return;
+      }
+
+      let rows = '';
+      groups.forEach(g => {
+        if (historyView.mode !== 'flat') {
+          const s = historyGroupStats(g.records);
+          const avgTtft = s.avgTtft == null ? '—' : Math.round(s.avgTtft) + 'ms';
+          if (historyView.mode === 'channel') {
+            const firstUrl = g.records.find(r => r.url);
+            rows += `<tr class="hist-group-row"><td colspan="7" title="${escapeHtml(firstUrl ? firstUrl.url : '')}"><b>${escapeHtml(g.key)}</b><span class="hist-group-stats">${s.count} 条 · 平均 ${fmtTps(s.avgTps)} t/s · 最快 ${fmtTps(s.bestTps)} t/s · 平均首包 ${avgTtft} · 最近 ${fmtShortDate(s.lastTs)}</span></td></tr>`;
+          } else {
+            rows += `<tr class="hist-group-row"><td colspan="7"><b>${escapeHtml(g.key)}</b><span class="hist-group-stats">${s.count} 条 · 平均 ${fmtTps(s.avgTps)} t/s · 平均首包 ${avgTtft}</span></td></tr>`;
+          }
+        }
+        g.records.forEach(r => { rows += historyRowHtml(r); });
+      });
+
+      body.innerHTML = `<table class="history-table hist-modal-table">
+        <thead><tr><th>时间</th><th>渠道</th><th>模型</th><th>首包延迟</th><th>总耗时</th><th>速度</th><th>Tokens</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+      foot.textContent = `显示 ${list.length} / 共 ${history.length} 条 · 最多保留 ${HISTORY_MAX} 条`;
+    }
+
+    function openHistoryModal() {
+      historyLastFocus = document.activeElement;
+      historyModalOpen = true;
+      const modal = $('histModal');
+      modal.hidden = false;
+      document.body.classList.add('hist-modal-open');
+      refreshHistoryChannelOptions();
+      renderHistoryModal();
+      const close = modal.querySelector('.hist-close');
+      if (close) close.focus();
+    }
+
+    function closeHistoryModal() {
+      if (!historyModalOpen) return;
+      historyModalOpen = false;
+      $('histModal').hidden = true;
+      document.body.classList.remove('hist-modal-open');
+      if (historyLastFocus && typeof historyLastFocus.focus === 'function') historyLastFocus.focus();
+      historyLastFocus = null;
+    }
+
+    async function clearHistory() {
+      if (!history.length && !historyError) {
+        if (common && common.toast) common.toast('暂无测试记录');
+        return;
+      }
+      if (!confirm('清空全部测试记录？此操作会删除服务器上的历史文件内容，不可恢复。')) return;
+      try {
+        const res = await fetch('/api/speed-history', { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        history = [];
+        historyError = '';
+        try {
+          localStorage.removeItem(LEGACY_HISTORY_KEY);
+          localStorage.setItem(HISTORY_MIGRATED_KEY, '1');
+        } catch (e) { /* localStorage 不可用时忽略 */ }
+        renderHistory();
+        if (historyModalOpen) {
+          refreshHistoryChannelOptions();
+          renderHistoryModal();
+        }
+        if (common && common.toast) common.toast('已清空测试记录');
+      } catch (err) {
+        showError('清空测试记录失败：' + ((err && err.message) ? err.message : err));
+      }
     }
 
     // ========== 错误提示 ==========
@@ -1877,6 +2351,39 @@
     $('diagBtn').addEventListener('click', runDiagnose);
     $('clearBtn').addEventListener('click', clearHistory);
 
+    // 全量历史弹层
+    $('histOpenBtn').addEventListener('click', openHistoryModal);
+    $('histModal').addEventListener('click', e => {
+      if (e.target.closest('[data-hist-close]')) closeHistoryModal();
+    });
+    $('histModalBody').addEventListener('click', e => {
+      if (e.target.closest('[data-hist-retry]')) fetchHistory();
+    });
+    $('historyBody').addEventListener('click', e => {
+      if (e.target.closest('#histRetry')) fetchHistory();
+    });
+    $('histChannelFilter').addEventListener('change', e => {
+      historyView.channel = e.target.value;
+      renderHistoryModal();
+    });
+    $('histRangeFilter').addEventListener('change', e => {
+      historyView.range = e.target.value;
+      renderHistoryModal();
+    });
+    $('histSearch').addEventListener('input', e => {
+      historyView.q = e.target.value;
+      renderHistoryModal();
+    });
+    $('histViewToggle').addEventListener('click', e => {
+      const btn = e.target.closest('[data-hist-view]');
+      if (!btn) return;
+      historyView.mode = btn.dataset.histView;
+      $('histViewToggle').querySelectorAll('[data-hist-view]').forEach(b => {
+        b.classList.toggle('on', b === btn);
+      });
+      renderHistoryModal();
+    });
+
     // API Key 显示 / 隐藏
     $('keyToggle').addEventListener('click', () => {
       const input = $('apiKey');
@@ -1894,7 +2401,11 @@
 
     // 快捷键 Ctrl+Enter 开始测试
     document.addEventListener('keydown', e => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (e.key === 'Escape' && historyModalOpen) {
+        closeHistoryModal();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !historyModalOpen) {
         e.preventDefault();
         if (!running) runTest();
       }
@@ -1916,9 +2427,7 @@
         if (type === 'saved' || type === 'changed') refreshSuggestions();
       }
     });
-    renderPresets();
-    loadHistory();
-    renderHistory();
+    initHistory();
     refreshSuggestions();
 
     // 探测后端服务是否在线：用于区分本服务页面与静态预览（预览地址没有 /api/health）

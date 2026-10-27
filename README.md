@@ -25,7 +25,7 @@
 - **实时流式测速**：测试过程中实时预览模型回复与思考过程（打字机光标），指标卡滚动刷新（TTFT 逐毫秒计时、实时速度、收字统计）；随时可点「停止」中止，半程数据保留并标注
 - **测速页两行表单**：24 列细网格，API 地址 / Key / 模型 + Prompt / 生成参数 / 思考控制两行放完 —— Key 与模型名拿到约 30% 宽度不再被挤窄；全部内容一屏放完无需滚动，历史记录吃掉剩余高度、行多时表格内部滚动
 - **指标对比与扩展**：核心指标卡带「对比上一次」增量标记（绿=更快 / 红=更慢）；扩展 chips 展示输入 / 思考 Tokens、正文首字延迟、chunk 间隔与抖动峰值；思考生效时显示**实际下发参数**
-- **测试记录持久化**：记录自动保存在本机（刷新不丢，最多 20 条），首包延迟 / 速度按阈值配色，最快一条 🏆 高亮
+- **测试记录持久化**：成功测速自动记录到服务端 `logs/speed-history.json`，最多保留 1000 条，跨浏览器与重启不丢；表格显示渠道、首包延迟 / 速度按阈值配色，最快一条 🏆 高亮；「查看全部」弹层支持按渠道 / 时间 / 关键字筛选与按时间、渠道分组
 - **便捷输入**：API Key 一键显隐；模型名与地址带下拉建议（来自预设与已保存渠道）
 
 ## 环境要求
@@ -517,6 +517,9 @@ logs/
 | `/api/test` | POST | 单次速度测试，返回 TTFT、总耗时、tokens/s 等指标 |
 | `/api/test`（`live: true`） | POST | **流式模式**：返回 SSE（透传上游增量，可实时预览），结束时追加 `data: {"__metrics__": {...}}` 事件（含 `appliedThinking`） |
 | `/api/test-multi` | POST | 连续测试 N 次（默认 3 次，最多 10 次），返回所有结果 |
+| `/api/speed-history` | GET | 测速历史列表：`{ ok, records, total, max }`，按时间倒序，最多 1000 条 |
+| `/api/speed-history` | DELETE | 清空全部测速历史（服务端为原子落盘失败会回滚并返回 500） |
+| `/api/speed-history/import` | POST | 迁移旧版 `localStorage` 记录（`{ records: [...] }`，自动去重、清洗并截断到 1000 条） |
 | `/api/chat` | POST | 聊天流式代理，将 SSE 流透传到浏览器，并在流结束时追加 `data: {"__metrics__": {...}}` 事件回传本轮速度指标 |
 | `/api/tts` | POST | 语音合成代理：按模型家族路由到百炼对应端点，下载/拼接音频后缓存到内存，返回同源播放地址与指标 |
 | `/api/tts/audio/:id` | GET | 读取缓存中的合成音频（同源，供播放、下载与波形解码） |
@@ -584,6 +587,15 @@ logs/
 > `/api/test` 不传 `live` 时保持旧行为：等整包结束后一次性返回 JSON。新版测速页会优先走 live 模式；
 > 如果连到的是**未升级的旧版服务端**，会自动回退为一次性 JSON 模式（功能可用，只是没有实时流）。改完 `server.js` 需重启服务才生效。
 
+### 测速历史
+
+- 只有**成功**完成的 `/api/test` 才会记录；失败、超时、客户端中止、`/api/chat` 都不会写入。
+- 记录保存在服务端 `logs/speed-history.json`，按时间倒序，最多 1000 条；临时文件 + `rename` 原子写入，重启后保留。
+- 测速页会把匹配到的本地渠道随请求传入：`channelId`、`channelName`（未命中时为 URL 自动生成的显示名）。服务端生成的记录挂在 `metrics.historyRecord` 上，随 SSE `__metrics__` 或非流式 JSON 返回。
+- `url` / `endpoint` 落盘前会去掉 query 与 hash；记录中不保存 API Key、Prompt、模型回复或思考正文。
+- 旧版 `localStorage` 记录（`llm-speed-history-v1`）会在页面打开时自动导入服务端，去重后删除旧键；迁移标记为 `llm-speed-history-migrated-v1`。
+- 历史存储单元测试：`npm test`（`tests/speed-history.test.mjs`）。
+
 ### 聊天页指标说明
 
 `__metrics__` 事件字段：
@@ -627,6 +639,9 @@ logs/
 ```
 01llmtext/
 ├── server.js          # Express 服务端：测速 / 聊天 / 语音合成 / 链路联调 / 语音对话 + VAD 侧车托管
+├── speed-history.js   # 测速历史存储：清洗、去重、1000 条上限、原子写入
+├── tests/
+│   └── speed-history.test.mjs  # 历史存储单元测试（node --test）
 ├── package.json
 ├── vad_service/       # 免提 VAD 侧车（Python，移植自 realtime-voice-agent）
 │   ├── sidecar.py     # WebSocket 服务：收 PCM → 事件（含 /health）
@@ -654,6 +669,7 @@ logs/
 logs/
 ├── YYYY-MM-DD/<runId>.json   # 每轮对话 / 每次识别的完整日志
 ├── audio/<runId>.{in,out}.wav
+├── speed-history.json        # 测速历史（最多 1000 条，不含 Key / Prompt / 回复正文）
 └── vad-service.log           # VAD 侧车的 stdout/stderr（排查启动/崩溃）
 ```
 
@@ -664,6 +680,7 @@ logs/
 ## 注意事项
 
 - API Key 仅在前端输入、由服务端代理请求，**不会上传到任何第三方**；配置与渠道保存在浏览器 localStorage（本地），清除浏览器数据或删除对应渠道可移除
+- 测速历史保存在服务端 `logs/speed-history.json`，只含渠道名、模型、指标与去掉 query/hash 的 URL，**不含 API Key、Prompt、回复正文**；点「清空记录」或删除该文件可移除
 - 单次测速请求超时 120s，聊天请求超时 180s，语音合成请求超时默认 120s（可在「高级选项」调整）
 - 请遵守各模型服务商的使用条款，避免高频并发请求触发限流
 - **语音合成需注意**：音色与模型强绑定，跨模型使用会被上游拒绝（`InvalidParameter`）；合成的音频缓存在服务端内存中（最多 80 条，**重启即清空**），历史记录里的试听链接可能在重启后失效

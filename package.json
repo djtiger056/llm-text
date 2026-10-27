@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "test": "node --test tests/speed-history.test.mjs",
     "vad": "python -m vad_service.sidecar --port 3221"
   },
   "dependencies": {

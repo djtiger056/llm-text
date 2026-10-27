@@ -263,23 +263,81 @@
     if ($('channelName') && cfg.name) $('channelName').value = cfg.name;
   }
 
-  function autoName(cfg) {
-    // 默认直接用 API 地址作名称，控制在可读长度内
-    var raw = String(cfg.url || '').trim();
-    if (!raw) return '未命名渠道';
-    try {
-      var u = new URL(raw);
-      var segs = (u.pathname || '').split('/').filter(Boolean);
-      // 末段是通用端点名（chat/completions、v1 等）时丢弃，它们没有区分度
-      while (segs.length && /^(chat|completions|v\d+|api|messages)$/i.test(segs[segs.length - 1])) {
-        segs.pop();
+    function autoName(cfg) {
+      // 默认直接用 API 地址作名称，控制在可读长度内
+      var raw = String(cfg.url || '').trim();
+      if (!raw) return '未命名渠道';
+      try {
+        var u = new URL(raw);
+        var segs = (u.pathname || '').split('/').filter(Boolean);
+        // 末段是通用端点名（chat/completions、v1 等）时丢弃，它们没有区分度
+        while (segs.length && /^(chat|completions|v\d+|api|messages)$/i.test(segs[segs.length - 1])) {
+          segs.pop();
+        }
+        // 最多保留两段，保证名称短且能区分不同中转站
+        return u.host + (segs.length ? '/' + segs.slice(0, 2).join('/') : '');
+      } catch (e) {
+        return raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
       }
-      // 最多保留两段，保证名称短且能区分不同中转站
-      return u.host + (segs.length ? '/' + segs.slice(0, 2).join('/') : '');
-    } catch (e) {
-      return raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
     }
-  }
+
+    /** 规范化 URL 用于渠道匹配：忽略 query/hash、尾部斜杠与 host 大小写 */
+    function normalizeUrlForMatch(raw) {
+      var text = String(raw || '').trim();
+      var out = { raw: text, origin: '', host: '', path: '' };
+      if (!text) return out;
+      try {
+        var u = new URL(text);
+        var path = u.pathname.replace(/\/+$/, '');
+        out.origin = String(u.origin || '').toLowerCase();
+        out.host = String(u.hostname || '').toLowerCase();
+        out.path = path;
+        out.raw = out.origin + path;
+      } catch (e) {
+        out.raw = text.replace(/\/+$/, '').toLowerCase();
+      }
+      return out;
+    }
+
+    /**
+     * 按 URL + 模型 + Key 匹配已保存渠道。
+     * 优先级：完整地址+模型+Key → 完整地址+模型 → 同域名+模型 → 同域名唯一渠道。
+     */
+    function matchChannel(url, model, apiKey) {
+      var target = normalizeUrlForMatch(url);
+      var wantModel = String(model || '').trim();
+      var wantKey = String(apiKey || '').trim();
+      if (!target.raw || !wantModel) return null;
+
+      var list = readChannels();
+      function sameUrl(c) { return normalizeUrlForMatch(c.url).raw === target.raw; }
+      function sameHost(c) {
+        var h = normalizeUrlForMatch(c.url).host;
+        return !!h && h === target.host;
+      }
+      function sameModel(c) { return String(c.model || '').trim() === wantModel; }
+
+      var hit = list.filter(function (c) {
+        return sameUrl(c) && sameModel(c) && (!wantKey || c.apiKey === wantKey);
+      })[0];
+      if (hit) return hit;
+
+      hit = list.filter(function (c) { return sameUrl(c) && sameModel(c); })[0];
+      if (hit) return hit;
+
+      hit = list.filter(function (c) { return sameHost(c) && sameModel(c); })[0];
+      if (hit) return hit;
+
+      var sameHostList = list.filter(sameHost);
+      return sameHostList.length === 1 ? sameHostList[0] : null;
+    }
+
+    /** 渠道展示信息：命中已保存渠道用渠道名，否则用 API 地址生成名称 */
+    function resolveChannel(url, model, apiKey) {
+      var c = matchChannel(url, model, apiKey);
+      if (c) return { id: c.id, name: c.name, matched: true };
+      return { id: '', name: autoName({ url: url }), matched: false };
+    }
 
 /* ---------- 渠道气泡 ---------- */
     function renderChannelBar(page) {
@@ -298,6 +356,117 @@
         '  </div>' +
         '  <p class="sc-hint" id="channelHint">点气泡即可把该渠道的配置（含思考设置）载入表单；「×」删除。测试通过后可从底部一键存为新渠道。</p>' +
         '</div>';
+      setupChannelStrip();
+    }
+
+    /* ---------- 渠道条：按住拖动 / 滚轮横向滚动 ---------- */
+    var stripBound = null;   // 已绑定事件的渠道条 DOM
+    var stripRefresh = null; // 渲染后重新计算是否可滚
+
+    function setupChannelStrip() {
+      var box = $('chanBubbles');
+      if (!box || stripBound === box) return;
+      stripBound = box;
+
+      var drag = null;
+      var suppressClick = false;
+
+      function maxScrollX() { return Math.max(0, box.scrollWidth - box.clientWidth); }
+      function maxScrollY() { return Math.max(0, box.scrollHeight - box.clientHeight); }
+      function canScroll() { return maxScrollX() > 2 || maxScrollY() > 2; }
+
+      function updateStrip() {
+        var on = maxScrollX() > 2 || maxScrollY() > 2;
+        box.classList.toggle('is-scrollable', on);
+        box.classList.toggle('is-dragging', !!(drag && drag.moved));
+      }
+
+      stripRefresh = function () {
+        // 气泡刚插入时尺寸还没稳定，下一帧再量
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(updateStrip);
+        else updateStrip();
+      };
+
+      box.addEventListener('scroll', updateStrip, { passive: true });
+
+      if (typeof ResizeObserver === 'function') {
+        new ResizeObserver(updateStrip).observe(box);
+      } else {
+        window.addEventListener('resize', updateStrip);
+      }
+
+      // 横向布局时：上下滚轮 -> 横向滚动；纵向布局交给系统原生滚动
+      box.addEventListener('wheel', function (e) {
+        var maxX = maxScrollX();
+        if (e.ctrlKey || maxX <= 2) return; // Ctrl+滚轮留给缩放
+        var delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (!delta) return;
+        if ((delta < 0 && box.scrollLeft <= 0) || (delta > 0 && box.scrollLeft >= maxX - 1)) return;
+        e.preventDefault();
+        box.scrollLeft = Math.max(0, Math.min(maxX, box.scrollLeft + delta));
+        updateStrip();
+      }, { passive: false });
+
+      // 鼠标 / 触控笔按住拖动；触摸保留系统惯性滚动
+      box.addEventListener('pointerdown', function (e) {
+        if (!canScroll()) return;
+        if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        drag = {
+          id: e.pointerId,
+          startX: e.clientX,
+          startY: e.clientY,
+          startLeft: box.scrollLeft,
+          startTop: box.scrollTop,
+          moved: false
+        };
+      });
+
+      window.addEventListener('pointermove', function (e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        // 鼠标/笔已经松开（可能在窗口外松手，没收到 pointerup）：结束拖动
+        if (e.pointerType !== 'touch' && !e.buttons) { endDrag(e); return; }
+        var dx = e.clientX - drag.startX;
+        var dy = e.clientY - drag.startY;
+        if (!drag.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        if (!drag.moved) {
+          drag.moved = true;
+          try { box.setPointerCapture(drag.id); } catch (err) { /* 忽略 */ }
+        }
+        e.preventDefault();
+        box.scrollLeft = drag.startLeft - dx;
+        box.scrollTop = drag.startTop - dy;
+        updateStrip();
+      });
+
+      function endDrag(e) {
+        var active = drag;
+        if (!active || (e && e.pointerId !== active.id)) return;
+        drag = null;
+        if (active.moved) {
+          suppressClick = true;
+          setTimeout(function () { suppressClick = false; }, 0);
+        }
+        try { box.releasePointerCapture(active.id); } catch (err) { /* 忽略 */ }
+        updateStrip();
+      }
+
+      window.addEventListener('pointerup', endDrag);
+      window.addEventListener('pointercancel', endDrag);
+      window.addEventListener('blur', function () { if (drag) endDrag(null); });
+      box.addEventListener('lostpointercapture', endDrag);
+
+      // 拖动结束后紧跟的 click 吞掉，避免误触载入渠道
+      box.addEventListener('click', function (e) {
+        if (!suppressClick) return;
+        suppressClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+
+      box.addEventListener('dragstart', function (e) { e.preventDefault(); });
+
+      stripRefresh();
     }
 
     /** 当前页面标识（index / chat），供气泡点击回调使用 */
@@ -308,6 +477,9 @@
       var box = $('chanBubbles');
       if (!box) return;
       var list = readChannels();
+      // 重绘前记住滚动位置：点击渠道会触发重绘，否则条会突然跳回最左边
+      var keepLeft = box.scrollLeft;
+      var keepTop = box.scrollTop;
       // 清空旧气泡：优先用 replaceChildren（真实浏览器），回退 innerHTML。
       // 注意：不能写 `box.children = []` —— children 是只读访问器，
       // 严格模式下赋值会抛 TypeError，直接中断整个 init()。
@@ -319,6 +491,9 @@
         empty.className = 'chan-empty';
         empty.textContent = '还没有保存的渠道 —— 填好配置后点「+ 保存当前」';
         box.appendChild(empty);
+        box.scrollLeft = 0;
+        box.scrollTop = 0;
+        if (stripRefresh) stripRefresh();
         return;
       }
 
@@ -357,6 +532,31 @@
 
         box.appendChild(bubble);
       });
+
+      box.scrollLeft = keepLeft;
+      box.scrollTop = keepTop;
+      if (stripRefresh) stripRefresh();
+    }
+
+    /** 把当前选中气泡带回可视区（保存/程序化切换后用） */
+    function revealActiveChannel() {
+      var box = $('chanBubbles');
+      if (!box) return;
+      var active = box.querySelector('.chan-bubble.active');
+      if (!active) return;
+      var ar = active.getBoundingClientRect();
+      var br = box.getBoundingClientRect();
+      var padX = 12;
+      var padY = 2;
+      var dx = 0;
+      var dy = 0;
+      if (ar.left < br.left + padX) dx = ar.left - (br.left + padX);
+      else if (ar.right > br.right - padX) dx = ar.right - (br.right - padX);
+      if (ar.top < br.top + padY) dy = ar.top - (br.top + padY);
+      else if (ar.bottom > br.bottom - padY) dy = ar.bottom - (br.bottom - padY);
+      box.scrollLeft += dx;
+      box.scrollTop += dy;
+      if (stripRefresh) stripRefresh();
     }
 
     function findChannel(id) {
@@ -385,6 +585,7 @@
       applyConfig(page, c);
       setLastId(id);
       renderChannelBubbles();
+      revealActiveChannel();
       syncOverwriteBtn();
       toast('已载入：' + c.name, 'ok');
       emit('changed', c);
@@ -444,6 +645,7 @@
 
       setLastId(record.id);
       renderChannelBubbles();
+      revealActiveChannel();
       // 保存后清空名称输入框：否则下一次保存会复用旧名字，名称就越积越长
       if ($('channelName')) $('channelName').value = '';
       syncOverwriteBtn();
@@ -657,6 +859,10 @@
     updateThinkingUI: updateThinkingUI,
     buildThinkingParams: buildThinkingParams,
     detectThinkingProvider: detectThinkingProvider,
+    autoName: autoName,
+    normalizeUrlForMatch: normalizeUrlForMatch,
+    matchChannel: matchChannel,
+    resolveChannel: resolveChannel,
     markPassed: markPassed,
     toast: toast,
     EFFORT_BUDGET: EFFORT_BUDGET,
