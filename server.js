@@ -1,6 +1,6 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { createGzip } from 'zlib';
 import { readFile, writeFile, mkdir, readdir, unlink, rmdir, stat, appendFile } from 'fs/promises';
 import { createReadStream, existsSync } from 'fs';
@@ -12,7 +12,9 @@ import { SpeedHistoryStore, SPEED_HISTORY_MAX } from './speed-history.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3210;
-const speedHistory = new SpeedHistoryStore({ file: join(__dirname, 'logs', 'speed-history.json') });
+// LOG_DIR 可覆盖数据目录：测试用临时目录，避免污染仓库内的 logs/
+const LOG_DIR = process.env.LOG_DIR ? resolve(process.env.LOG_DIR) : join(__dirname, 'logs');
+const speedHistory = new SpeedHistoryStore({ file: join(LOG_DIR, 'speed-history.json') });
 
 /**
  * 阿里云百炼的 OpenAI 兼容前缀是 /compatible-mode/v1，而不是通用的 /v1。
@@ -471,18 +473,22 @@ app.post('/api/diagnose', async (req, res) => {
 });
 
 /**
- * POST /api/test
- * Body: { url, apiKey, model, prompt, maxTokens, temperature, thinking, live }
+ * 单次测速的核心逻辑（非流式）：请求上游、汇总指标、写入历史。
  *
- * live = true  ：走 SSE 流式模式 —— 边透传上游增量边采集指标，前端可实时预览回复与指标，
- *                流结束追加 `data: {"__metrics__": {...}}`（含 appliedThinking）
- * live 不传/为 false：等整个流结束后一次性返回 JSON（兼容脚本与旧版前端）
+ * 之所以抽成独立函数而不是用假 req/res 反向调用 app.handle()：
+ * Express 的 router 在处理每个请求时都会注入 expressInit / query / json 等中间件，
+ * 它们要求 res 是真正的 http.ServerResponse（需要 setHeader / getHeader / on 等方法）。
+ * 传入手写的 mock 对象会在 expressInit 里直接抛 "res.setHeader is not a function"，
+ * 导致 /api/test-multi 每次都失败。这里只保留真正需要的依赖（url/apiKey/model/...），
+ * 由调用方决定如何返回结果。
+ *
+ * @returns {Promise<object>} metrics 对象；参数不合法时返回 { error, status }
  */
-app.post('/api/test', async (req, res) => {
-  const { url, apiKey, model, prompt, maxTokens = 512, temperature = 0.7, thinking, live, channelId, channelName } = req.body;
+async function runSingleSpeedTest(params) {
+  const { url, apiKey, model, prompt, maxTokens = 512, temperature = 0.7, thinking, channelId, channelName } = params || {};
 
   if (!url || !apiKey || !model) {
-    return res.status(400).json({ error: '缺少必填参数: url, apiKey, model' });
+    return { status: 400, error: '缺少必填参数: url, apiKey, model' };
   }
 
   // 构造 OpenAI 兼容请求
@@ -497,18 +503,6 @@ app.post('/api/test', async (req, res) => {
     stream_options: { include_usage: true },
     ...thinkingParams
   };
-
-  // 流式模式：复用与 /api/chat 完全相同的透传链路，附带本次实际下发的思考参数
-  if (live === true) {
-    return proxyChatStream(req, res, {
-      endpoint,
-      apiKey,
-      body,
-      timeoutSec: 120,
-      extraMetrics: { appliedThinking: thinkingParams },
-      historyMeta: { model, url, endpoint, channelId, channelName }
-    });
-  }
 
   const metrics = {
     ttft: null,           // 首 token 延迟 ms（含思考模型的思考耗时）
@@ -551,7 +545,7 @@ app.post('/api/test', async (req, res) => {
       const errText = await response.text().catch(() => '');
       clearTimeout(timeout);
       metrics.error = upstreamErrorMessage(endpoint, response, errText);
-      return res.json(metrics);
+      return metrics;
     }
 
     const reader = response.body.getReader();
@@ -614,7 +608,7 @@ app.post('/api/test', async (req, res) => {
         ? `上游返回错误：${String(upstreamError).slice(0, 500)}`
         : upstreamNotStreamError(response, rawSample);
       metrics.totalTime = Math.round(performance.now() - startTime);
-      return res.json(metrics);
+      return metrics;
     }
 
     // 汇总采集器结果到响应（口径与 /api/chat 完全一致）
@@ -642,46 +636,83 @@ app.post('/api/test', async (req, res) => {
       }
     }
 
-    res.json(metrics);
+    return metrics;
 
   } catch (err) {
     metrics.error = friendlyError(err, 120);
     metrics.totalTime = Math.round(performance.now() - startTime);
-    res.json(metrics);
+    return metrics;
   }
+}
+
+/**
+ * POST /api/test
+ * Body: { url, apiKey, model, prompt, maxTokens, temperature, thinking, live }
+ *
+ * live = true  ：走 SSE 流式模式 —— 边透传上游增量边采集指标，前端可实时预览回复与指标，
+ *                流结束追加 `data: {"__metrics__": {...}}`（含 appliedThinking）
+ * live 不传/为 false：等整个流结束后一次性返回 JSON（兼容脚本与旧版前端）
+ */
+app.post('/api/test', async (req, res) => {
+  const { url, apiKey, model, prompt, maxTokens, temperature, thinking, live, channelId, channelName } = req.body;
+
+  if (!url || !apiKey || !model) {
+    return res.status(400).json({ error: '缺少必填参数: url, apiKey, model' });
+  }
+
+  // 流式模式：复用与 /api/chat 完全相同的透传链路，附带本次实际下发的思考参数。
+  // 这条路径不经过 runSingleSpeedTest，直接由 proxyChatStream 负责 SSE 透传与落库。
+  if (live === true) {
+    const endpoint = normalizeEndpoint(url);
+    const thinkingParams = buildThinkingParams(thinking, url, model);
+    const body = {
+      model,
+      messages: [{ role: 'user', content: prompt || '请用500字左右介绍一下量子计算的基本原理和应用前景。' }],
+      max_tokens: maxTokens == null ? 512 : maxTokens,
+      temperature: temperature == null ? 0.7 : temperature,
+      stream: true,
+      stream_options: { include_usage: true },
+      ...thinkingParams
+    };
+    return proxyChatStream(req, res, {
+      endpoint,
+      apiKey,
+      body,
+      timeoutSec: 120,
+      extraMetrics: { appliedThinking: thinkingParams },
+      historyMeta: { model, url, endpoint, channelId, channelName }
+    });
+  }
+
+  const metrics = await runSingleSpeedTest({
+    url, apiKey, model, prompt, maxTokens, temperature, thinking, channelId, channelName
+  });
+  if (metrics && metrics.status === 400) {
+    return res.status(400).json({ error: metrics.error });
+  }
+  return res.json(metrics);
 });
 
 /**
  * POST /api/test-multi
  * 连续测试 N 次，返回所有结果用于统计
+ *
+ * 直接复用 runSingleSpeedTest()，不再伪造 req/res 走路由器：
+ * 伪装的 res 缺少 http.ServerResponse 的 setHeader 等方法，会在 expressInit
+ * 中间件里抛 "res.setHeader is not a function"，让整个接口恒定失败。
  */
 app.post('/api/test-multi', async (req, res) => {
   const { count = 3, ...params } = req.body;
   const results = [];
 
-  for (let i = 0; i < Math.min(count, 10); i++) {
-    // 内部复用 /api/test 的逻辑
-    const mockReq = { body: params };
-    const mockRes = {
-      statusCode: 200,
-      status(code) { this.statusCode = code; return this; },
-      json(data) { results.push(data); }
-    };
+  // count 容错：非法值回落到 3，避免 NaN 让循环直接跳过
+  const total = Math.min(Math.max(Number(count) || 3, 1), 10);
 
-    // 直接调用处理函数
-    await new Promise((resolve) => {
-      const originalJson = mockRes.json.bind(mockRes);
-      mockRes.json = (data) => { originalJson(data); resolve(); };
-      // 重新触发 handler
-      app.handle(
-        { ...mockReq, method: 'POST', url: '/api/test', headers: {} },
-        mockRes,
-        resolve
-      );
-    });
+  for (let i = 0; i < total; i++) {
+    results.push(await runSingleSpeedTest(params));
 
     // 间隔 500ms 避免触发限流
-    if (i < count - 1) await new Promise(r => setTimeout(r, 500));
+    if (i < total - 1) await new Promise(r => setTimeout(r, 500));
   }
 
   res.json({ results });
