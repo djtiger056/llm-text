@@ -347,7 +347,7 @@ app.use(express.static(join(__dirname, 'public'), { maxAge: '1h' }));
  * features 用于前端探测服务端能力（旧版没有该字段，据此提示用户重启）。
  */
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, name: 'llm-speed-test', features: ['test', 'chat', 'tts', 'pipeline', 'asr', 'logs', 'vad', 'speed-history'], time: Date.now() });
+  res.json({ ok: true, name: 'llm-speed-test', features: ['test', 'chat', 'tts', 'tts-clone', 'pipeline', 'asr', 'logs', 'vad', 'speed-history'], time: Date.now() });
 });
 
 /**
@@ -1425,6 +1425,46 @@ function normalizeCustomizationEndpoint(rawUrl) {
 }
 
 /**
+ * 复刻音色的 target_model 白名单（用于从 voice_id 反推归属模型）。
+ * 官方 voice_id 形如 `{target_model}-{prefix}-{唯一标识}`，list_voice 有时不返回
+ * target_model，只能按前缀反推；必须按长度倒序匹配，否则 `...-plus` 会被
+ * `...-flash` 之类的短前缀误判。
+ */
+const CLONE_TARGET_MODELS = [
+  'qwen-audio-3.1-tts-plus', 'qwen-audio-3.1-tts-flash',
+  'qwen-audio-3.0-tts-plus', 'qwen-audio-3.0-tts-flash',
+  'qwen-audio-3.1-realtime-plus', 'qwen-audio-3.1-realtime-flash',
+  'qwen-audio-3.0-realtime-plus', 'qwen-audio-3.0-realtime-flash',
+  'cosyvoice-v3.5-plus', 'cosyvoice-v3.5-flash',
+  'cosyvoice-v3-plus', 'cosyvoice-v3-flash', 'cosyvoice-v2',
+  'qwen3-tts-flash'
+].sort((a, b) => b.length - a.length);
+
+function inferCloneTargetModel(voiceId) {
+  const id = String(voiceId || '');
+  if (!id) return '';
+  return CLONE_TARGET_MODELS.find((m) => id === m || id.startsWith(m + '-')) || '';
+}
+
+/** 复刻参考音频允许的 MIME；前端会优先转成 WAV，其他格式按原格式透传 */
+const CLONE_AUDIO_MIME = {
+  wav: 'audio/wav', mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'audio/mp4',
+  ogg: 'audio/ogg', oga: 'audio/ogg', webm: 'audio/webm', aac: 'audio/aac', flac: 'audio/flac'
+};
+
+const CLONE_LANG_SET = new Set(['zh', 'en', 'fr', 'de', 'ja', 'ko', 'ru', 'pt', 'th', 'id', 'vi', 'it', 'es', 'ms', 'fil', 'ar']);
+
+/** 目标模型未开放复刻时，给一条能直接照做的降级建议 */
+function cloneUnsupportedHint(targetModel, status, message) {
+  const low = String(message || '').toLowerCase();
+  const isPlus = /tts-plus$/i.test(String(targetModel || ''));
+  const looksUnsupported = status === 400 || status === 403
+    || /not\s*support|unsupport|invalid|permission|target_model|不支持|未开放|无权限|无权/.test(low);
+  if (!isPlus || !looksUnsupported) return '';
+  return '该模型可能尚未开放声音复刻（控制台通常滞后于 API）。可把目标模型改成 qwen-audio-3.1-tts-flash 再创建；复刻音色与目标模型强绑定，不能跨模型使用。';
+}
+
+/**
  * POST /api/tts/voices
  * Body: { url, apiKey, family, prefix?, pageIndex?, pageSize? }
  * 返回: { ok, family, endpoint, totalCount, voices: [{ voiceId, status, gmtCreate, gmtModified, targetModel }] }
@@ -1481,7 +1521,7 @@ app.post('/api/tts/voices', async (req, res) => {
       status: String(v.status || ''),
       gmtCreate: String(v.gmt_create || ''),
       gmtModified: String(v.gmt_modified || ''),
-      targetModel: String(v.target_model || '')
+      targetModel: String(v.target_model || '').trim() || inferCloneTargetModel(v.voice_id)
     })).filter((v) => v.voiceId);
 
     res.json({
@@ -1495,6 +1535,125 @@ app.post('/api/tts/voices', async (req, res) => {
     clearTimeout(timer);
     const msg = err.name === 'AbortError' ? '请求超时（30s）' : (err && err.message ? err.message : String(err));
     res.status(502).json({ error: '拉取复刻音色失败：' + msg });
+  }
+});
+
+/**
+ * POST /api/tts/clone
+ * Query: base, targetModel, prefix, language=zh, maxLen=10, preprocess=1, normalize=0, mime, filename
+ * Header: X-API-Key
+ * Body: 参考音频裸字节（audio/*）
+ * 返回: { ok, voiceId, targetModel, prefix, requestId, usage, endpoint, bytes, mime, ms }
+ *
+ * 为什么用裸字节而不是 JSON Base64：
+ *   1) 全局 express.json 上限 1MB，30s WAV 的 Base64 很容易超；
+ *   2) 浏览器端 audio 文件不必先转成超大字符串；
+ *   3) 服务端统一拼 data URI，前端只负责上传。
+ *
+ * 官方接口：POST {base}/api/v1/services/audio/tts/customization
+ *   model=voice-enrollment, input.action=create_voice
+ *   target_model 必须与后续合成使用的模型一致，否则合成阶段会失败。
+ */
+app.post('/api/tts/clone', express.raw({ type: () => true, limit: '24mb' }), async (req, res) => {
+  const t0 = performance.now();
+  const apiKey = String(req.get('x-api-key') || '').trim();
+  const base = String(req.query.base || req.query.url || 'https://dashscope.aliyuncs.com').trim();
+  const targetModel = String(req.query.targetModel || '').trim();
+  const prefix = String(req.query.prefix || '').trim();
+  const language = String(req.query.language || 'zh').trim();
+  const maxLen = clampInt(req.query.maxLen, 3, 30, 10);
+  const preprocess = req.query.preprocess === '1';
+  const normalize = req.query.normalize === '1' ? 'true' : 'false';
+  const filename = String(req.query.filename || '').trim();
+
+  if (!apiKey) return res.status(400).json({ error: '缺少 API Key（放在 X-API-Key 请求头）' });
+  if (!targetModel) return res.status(400).json({ error: '缺少 targetModel（复刻音色的目标模型）' });
+  if (!/^[A-Za-z0-9]{1,10}$/.test(prefix)) {
+    return res.status(400).json({ error: 'prefix 只能是 1–10 位字母或数字（官方要求）' });
+  }
+  if (!CLONE_LANG_SET.has(language)) {
+    return res.status(400).json({ error: `不支持的参考语种：${language}` });
+  }
+
+  const audio = Buffer.isBuffer(req.body) ? req.body : null;
+  if (!audio || !audio.length) return res.status(400).json({ error: '参考音频为空' });
+  if (audio.length > 20 * 1024 * 1024) {
+    return res.status(413).json({ error: '参考音频超过 20MB，请截取 3–30 秒后再试' });
+  }
+
+  let mime = String(req.query.mime || req.get('content-type') || 'audio/wav').split(';')[0].trim().toLowerCase();
+  if (!/^audio\//.test(mime)) {
+    const ext = filename.split('.').pop().toLowerCase();
+    mime = CLONE_AUDIO_MIME[ext] || 'audio/wav';
+  }
+  const dataUri = `data:${mime};base64,${audio.toString('base64')}`;
+
+  const endpoint = normalizeCustomizationEndpoint(base);
+  const body = {
+    model: 'voice-enrollment',
+    input: {
+      action: 'create_voice',
+      target_model: targetModel,
+      prefix,
+      audio: dataUri,
+      language_hints: [language],
+      max_prompt_audio_length: maxLen,
+      enable_preprocess: preprocess,
+      enable_volume_normalization: normalize
+    }
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const json = await response.json().catch(() => null);
+    const bizMsg = json ? extractTtsError(json) : null;
+
+    if (!response.ok || !json) {
+      let hint = cloneUnsupportedHint(targetModel, response.status, bizMsg || '');
+      if (!hint && response.status === 404 && /dashscope(-intl)?\.aliyuncs\.com/i.test(endpoint)) {
+        hint = '若持续 404，可改用业务空间专属域名（如 {WorkspaceId}.cn-beijing.maas.aliyuncs.com）';
+      }
+      return res.status(502).json({
+        error: `创建复刻音色失败：HTTP ${response.status}${bizMsg ? ' · ' + bizMsg : ''}`,
+        hint
+      });
+    }
+    if (bizMsg) {
+      return res.status(502).json({
+        error: `创建复刻音色失败：${bizMsg}`,
+        hint: cloneUnsupportedHint(targetModel, 502, bizMsg)
+      });
+    }
+
+    const voiceId = String((json.output && json.output.voice_id) || '').trim();
+    if (!voiceId) {
+      return res.status(502).json({ error: '上游没有返回 voice_id，无法确认创建结果', hint: '' });
+    }
+
+    res.json({
+      ok: true,
+      voiceId,
+      targetModel,
+      prefix,
+      requestId: String(json.request_id || ''),
+      usage: json.usage || null,
+      endpoint: endpoint.replace(/^https?:\/\//, ''),
+      bytes: audio.length,
+      mime,
+      ms: Math.round(performance.now() - t0)
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    const msg = err.name === 'AbortError' ? '请求超时（60s）' : (err && err.message ? err.message : String(err));
+    res.status(502).json({ error: '创建复刻音色失败：' + msg, hint: '' });
   }
 });
 

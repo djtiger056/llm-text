@@ -15,7 +15,7 @@
 - **速度测试**：对任意 OpenAI 兼容 API 发起流式请求，采集首包延迟、总耗时、Tokens/s 等指标
 - **多次测试**：支持连续测试 N 次，便于统计平均值、稳定性
 - **在线聊天**：流式代理聊天（SSE 透传），前端实时渲染回复；推理模型自动折叠展示思考过程
-- **语音合成测试**：接入阿里云百炼 TTS（Qwen-Audio-TTS / CosyVoice / Qwen-TTS），17 项可调参数全部放开，音色库按模型联动，波形可视化 + 首包延迟测量；支持**一键拉取账号下已复刻的音色**（含审核状态徽标），操作条吸底悬浮、滚动时随时可点「开始合成」
+- **语音合成测试**：接入阿里云百炼 TTS（Qwen-Audio-TTS / CosyVoice / Qwen-TTS，含 2026-10 发布的 `qwen-audio-3.1-tts-plus` 旗舰音色），17 项可调参数全部放开，音色库按模型联动，波形可视化 + 首包延迟测量；支持**创建 / 拉取复刻音色**（上传 3–60s 参考音频即可复刻，含审核状态与跨模型隔离），操作条吸底悬浮、滚动时随时可点「开始合成」
 - **多模型对比**：可配置不同的 API 地址、Key、模型进行横向对比
 - **本地持久化**：API 配置（含 Key）、渠道列表、聊天记录与 TTS 参数自动保存在浏览器 localStorage，刷新页面后自动恢复
 - **URL 智能补全**：填 base URL（如 `https://api.xxx.com`、`.../v1` 或阿里云的 `.../compatible-mode/v1`）会自动补全为对应服务商 OpenAI 兼容的 `/chat/completions`（阿里云百炼自动补 `/compatible-mode/v1/chat/completions`，只填域名即可）；TTS 页填百炼域名会自动补全对应模型家族的端点路径
@@ -151,7 +151,7 @@ npm run dev
 
 | 家族 | 模型 | 端点 | 参数丰富度 |
 | --- | --- | --- | --- |
-| **Qwen-Audio-TTS** | `qwen-audio-3.1-tts-flash`（最新）、`qwen-audio-3.0-tts-plus`、`qwen-audio-3.0-tts-flash` | `{base}/api/v1/services/audio/tts/SpeechSynthesizer` | 全参数 |
+| **Qwen-Audio-TTS** | `qwen-audio-3.1-tts-plus`（旗舰音色 · 音质优先）、`qwen-audio-3.1-tts-flash`（低延迟）、`qwen-audio-3.0-tts-plus`、`qwen-audio-3.0-tts-flash` | `{base}/api/v1/services/audio/tts/SpeechSynthesizer` | 全参数 |
 | **CosyVoice** | `cosyvoice-v3.5-plus/flash`、`cosyvoice-v3-plus/flash`、`cosyvoice-v2` | 同上 | 全参数 |
 | **Qwen-TTS** | `qwen3-tts-flash` | `{base}/api/v1/services/aigc/multimodal-generation/generation` | 仅语种 |
 
@@ -195,6 +195,7 @@ Qwen-TTS 家族只支持 `text` / `voice` / `language_type` 三项，页面会�
 
 | 模型 | 内置音色数 | 分组 |
 | --- | --- | --- |
+| `qwen-audio-3.1-tts-plus` | 4 | 旗舰音色（官方仅开放 4 个；按字符计费，适合精品内容 / 角色演绎） |
 | `qwen-audio-3.1-tts-flash` | 68 | 精品中文（多语种/方言）、中文普通话、仅英文、角色/其他 |
 | `qwen-audio-3.0-tts-plus` / `-flash` | 2 / 5 | 系统音色（另有 500+ 基础音色，需按 `qwen-audio-3.0-tts-{plus\|flash}-{后缀}` 手输） |
 | `cosyvoice-v3-flash` | 43 | 标杆/社交陪伴、童声、方言、出海多语种、风格化 |
@@ -203,10 +204,28 @@ Qwen-TTS 家族只支持 `text` / `voice` / `language_type` 三项，页面会�
 音色名支持搜索与分组筛选；**也可以直接在 voice 输入框手输**（用于声音复刻 / 声音设计音色，
 或在 Excel 里查到的基础音色）。跨模型使用音色会被上游拒绝（`InvalidParameter`），页面已按模型隔离。
 
-### 复刻音色（一键拉取）
+### 声音复刻（创建 / 拉取）
+
+音色卡下方「**声音复刻 · 创建音色**」面板可以直接用一段参考音频创建专属音色，走百炼
+`POST {base}/api/v1/services/audio/tts/customization`（`model=voice-enrollment`, `action=create_voice`）。
+
+| 项目 | 说明 |
+| --- | --- |
+| 参考音频 | 3–60 秒干净人声；浏览器上传前自动转成 **24kHz 单声道 WAV**（解码失败则按原格式透传）；单文件 ≤20MB |
+| `target_model` | 复刻音色与它强绑定，合成时必须用同一个模型；面板只列出 Qwen-Audio-TTS / CosyVoice（Qwen-TTS 不支持创建） |
+| `prefix` | 1–10 位字母或数字，最终 voice_id 形如 `{target_model}-{prefix}-{唯一标识}` |
+| 参考语种 | `language_hints` 只传一个，支持 zh/en/fr/de/ja/ko/ru/pt/th/id/vi/it/es/ms/fil/ar |
+| 预处理 | `enable_preprocess`（降噪增强）与 `enable_volume_normalization`（音量归一）可选 |
+| 创建结果 | 返回 `voice_id` 后自动刷新列表；状态为 `DEPLOYING` 时需等审核通过再合成 |
+
+> **`qwen-audio-3.1-tts-plus` 的声音复刻**：官方 API 文档的 `target_model` 已包含它（创建示例即用 Plus），
+> 但控制台「声音复刻」页面可能还没放出该模型。面板可以直接选 Plus 尝试；若上游返回不支持，
+> 会提示并提供「改用 `qwen-audio-3.1-tts-flash` 创建」按钮。**复刻音色不能跨模型使用**，
+> 用 flash 创建的音色无法在 Plus 合成时选用。
 
 音色卡右上角「⟳ 拉取复刻音色」调用 `/api/tts/voices` 查询**本账号在百炼已复刻的音色**，
 结果以「🎭 复刻 (N)」分组展示，点击 chip 直接填入 voice 参数；列表缓存在 localStorage，刷新不丢。
+列表会按 `target_model`（缺失时按 voice_id 前缀反推）标记归属，**不属于当前模型的音色会置灰**，避免选错后合成失败。
 
 | 状态徽标 | 上游状态 | 可否选用 |
 | --- | --- | --- |
@@ -214,12 +233,11 @@ Qwen-TTS 家族只支持 `text` / `voice` / `language_type` 三项，页面会�
 | 审核中 | `DEPLOYING`（审核/处理中） | 暂不可点选 |
 | 未通过 | `UNDEPLOYED` | 不可点选 |
 
-> 复刻音色与**复刻时指定的目标模型**强绑定（voice_id 前缀可见，如 `qwen-audio-3.0-tts-flash-xxx`），
-> 需在用同一目标模型的合成请求里使用。MiniMax 不支持该查询接口，请到百炼控制台「声音管理」查看。
+> MiniMax 不支持该查询接口，请到百炼控制台「声音管理」查看。
 
 ### 情感与拟声标签
 
-`qwen-audio-3.1-tts-flash`、`qwen-audio-3.0-tts-plus`、`qwen-audio-3.0-tts-flash` 支持在文本里直接写标签：
+`qwen-audio-3.1-tts-plus`、`qwen-audio-3.1-tts-flash`、`qwen-audio-3.0-tts-plus`、`qwen-audio-3.0-tts-flash` 支持在文本里直接写标签：
 
 - **控制类**（作用于其后所有文本，直到下一个控制标签）：`[excited]` `[serious]` `[sad]` `[angry]` `[amazed]` `[curious]` `[crying]` `[whispers]` `[asmr]` `[mischievously]` `[very fast]` `[very slowly]` 等（官方共 24 个）
 - **富语言类**（在当前位置插入拟声，不影响前后风格）：`[laughing]` `[giggles]` `[sighing]` `[gasp]` `[cough]` `[clears throat]` `[snorts]`
@@ -524,6 +542,7 @@ logs/
 | `/api/tts` | POST | 语音合成代理：按模型家族路由到百炼对应端点，下载/拼接音频后缓存到内存，返回同源播放地址与指标 |
 | `/api/tts/audio/:id` | GET | 读取缓存中的合成音频（同源，供播放、下载与波形解码） |
 | `/api/tts/voices` | POST | 查询账号下已复刻的音色列表（百炼「声音复刻」customization 接口；Qwen-Audio-TTS/CosyVoice 走 `list_voice`，Qwen-TTS 走 `list`，MiniMax 不支持） |
+| `/api/tts/clone` | POST | 创建复刻音色：请求体为参考音频裸字节（`audio/*`），Query 传 `base` / `targetModel` / `prefix` / `language` / `maxLen` / `preprocess` / `normalize`，`X-API-Key` 鉴权；服务端拼成 Base64 Data URI 调用 `create_voice` |
 | `/api/pipeline/run` | POST | 链路联调：服务端完成 LLM 流式 → 分句 → TTS，用**一条 SSE** 回传文本增量、句子、音频块与分段指标（见下节）。额外可传 `sessionId` / `turnIndex` / `source`，`done` 事件会回传 `logId` |
 | `/api/asr/models` | GET | ASR 模型能力注册表（模型 / 语种上限 / 是否支持 context、热词、分离、方言），前端据此渲染参数 |
 | `/api/asr/transcribe` | POST | 录音文件识别：请求体是**裸音频字节**（`Content-Type: audio/wav`），配置走 query（`base` / `model` / `langs` / `anchor` / `context` / `hotWords` / `diarization` / `keepDialect` / `timeoutSec` / `storeAudio`），Key 走 `X-API-Key` 头；返回文本、句级时间戳、分段耗时与 `logId` |

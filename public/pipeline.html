@@ -434,8 +434,17 @@
           <div class="field"><label class="lbl">API 地址</label><input type="text" id="ttsUrl" class="mono" placeholder="https://dashscope.aliyuncs.com"></div>
           <div class="row2">
             <div class="field"><label class="lbl">API Key</label><input type="password" id="ttsKey" class="mono" placeholder="sk-..."></div>
-            <div class="field"><label class="lbl">模型</label><input type="text" id="ttsModel" class="mono" placeholder="qwen-audio-3.1-tts-flash"></div>
+            <div class="field"><label class="lbl">模型</label><input type="text" id="ttsModel" class="mono" list="ttsModelOptions" placeholder="qwen-audio-3.1-tts-flash"></div>
           </div>
+          <datalist id="ttsModelOptions">
+            <option value="qwen-audio-3.1-tts-flash">低延迟 · 方言/多语种</option>
+            <option value="qwen-audio-3.1-tts-plus">最新旗舰 · 音质优先（仅 4 音色）</option>
+            <option value="qwen-audio-3.0-tts-plus"></option>
+            <option value="qwen-audio-3.0-tts-flash"></option>
+            <option value="cosyvoice-v3.5-flash"></option>
+            <option value="cosyvoice-v3-flash"></option>
+            <option value="qwen3-tts-flash"></option>
+          </datalist>
           <div class="field">
             <label class="lbl">音色 <span id="voiceHint" style="color:var(--text-muted)"></span></label>
             <input type="text" id="ttsVoice" class="mono" list="voiceOptions" placeholder="longanhuan_v3.1">
